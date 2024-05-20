@@ -1,5 +1,4 @@
 import aiogram
-import aiogram.utils.keyboard
 
 
 ADMIN_COMMANDS = aiogram.types.ReplyKeyboardMarkup(
@@ -12,6 +11,10 @@ ADMIN_COMMANDS = aiogram.types.ReplyKeyboardMarkup(
         [
             aiogram.types.KeyboardButton(text="Создание промокода"),
             aiogram.types.KeyboardButton(text="Удаление промокода"),
+            aiogram.types.KeyboardButton(text="Список промокодов"),
+        ],
+        [
+            aiogram.types.KeyboardButton(text="Список заказов"),
         ],
     ],
     row_width=3,
@@ -23,6 +26,25 @@ CHOICE_EDIT_ITEM = aiogram.types.ReplyKeyboardMarkup(
     keyboard=[
         [aiogram.types.KeyboardButton(text="Верно")],
         [aiogram.types.KeyboardButton(text="Неверно")],
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Выберите пункт меню",
+)
+
+CHOICE_EDIT_ORDER = aiogram.types.ReplyKeyboardMarkup(
+    keyboard=[
+        [aiogram.types.KeyboardButton(text="Сменить статус")],
+        [aiogram.types.KeyboardButton(text="Удалить")],
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Выберите пункт меню",
+)
+
+CHOICE_EDIT_ORDER_STATUS = aiogram.types.ReplyKeyboardMarkup(
+    keyboard=[
+        [aiogram.types.KeyboardButton(text="CREATED")],
+        [aiogram.types.KeyboardButton(text="IN_PROGRESS")],
+        [aiogram.types.KeyboardButton(text="COMPLETED")],
     ],
     resize_keyboard=True,
     input_field_placeholder="Выберите пункт меню",

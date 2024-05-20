@@ -30,3 +30,10 @@ class CreatePcode(aiogram.fsm.state.StatesGroup):
 class DeletePocde(aiogram.fsm.state.StatesGroup):
     name = aiogram.fsm.state.State()
     choice = aiogram.fsm.state.State()
+
+
+class EditOrder(aiogram.fsm.state.StatesGroup):
+    order_id = aiogram.fsm.state.State()
+    edit_status = aiogram.fsm.state.State()
+    delete_order = aiogram.fsm.state.State()
+    edit_object = aiogram.fsm.state.State()

@@ -77,25 +77,26 @@ async def product_selected(
     callback: aiogram.types.CallbackQuery,
     state: aiogram.fsm.context.FSMContext,
 ):
-    await state.update_data(item_id=callback.data[-1])
+    product = callback.data.replace("product_", "")
+    await state.update_data(item_id=product)
 
     await callback.message.answer(
         "♻️ Начинаем процесс оформления заказа...\n"
-        f"Ваш выбранный товар - №{callback.data[-1]}\n\n"
-        "Пожалуйста, укажите ваше Техническое задание к заказу (если это товар - напишите 0)",
+        f"Ваш выбранный товар - №{product}\n\n"
+        "Пожалуйста, укажите промокод, если он у вас есть: (если нет - напишите 0)",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
     )
 
-    await state.set_state(st.CreateOrder.description_order)
+    await state.set_state(st.CreateOrder.pcode)
 
 
-@router.message(st.CreateOrder.description_order)
+@router.message(st.CreateOrder.pcode)
 async def order_create_description(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
     bot: aiogram.Bot,
 ):
-    await state.update_data(message=message.text.lower())
+    await state.update_data(pcode=message.text.lower())
 
     async with app.database.models.async_session() as session:
         user = await app.database.requests.get_user(
@@ -103,17 +104,29 @@ async def order_create_description(
         )
         await state.update_data(user=user.id)
 
+        pcode = None
+        if message.text.lower() != "0":
+            pcode = await app.database.requests.get_pcode(name=message.text.lower())
+            if pcode:
+                await app.database.requests.update_pcode(name=message.text.lower())
+                await message.answer(
+                    f"✅ Вы успешно активировали промокод {message.text.lower()} - {pcode.discount}% скидки",
+                )
+            else:
+                await message.answer(
+                    f"❗️ К сожалению, промокода {message.text.lower()} - не существует. "
+                    "Повторите попытку или введите 0",
+                )
+                await state.set_state(st.CreateOrder.pcode)
+                return
+
         await app.database.requests.update_user(
             session,
             tg_id=message.from_user.id,
         )
 
         data = await state.get_data()
-        if await app.database.requests.add_order(
-            session,
-            data,
-        ):
-
+        if await app.database.requests.add_order(session, data):
             await message.answer(
                 app.messages.SUCC_CREATE_ORDER_MESSAGE,
                 parse_mode=aiogram.enums.ParseMode.HTML,
@@ -121,14 +134,22 @@ async def order_create_description(
             )
 
             user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+            discount_info = (
+                f"ПРОМОКОД: {data.get('pcode')} - {pcode.discount}% скидки"
+                if pcode
+                else ""
+            )
+            item = await app.database.requests.get_item(data.get("item_id"))
             await bot.send_message(
                 os.getenv("ADMIN_ID", "admin_id"),
                 f"❗️ Пришел новый заказ\n\n{user_profile_link}\n"
-                f"Текст: {data.get('message').title()}",
+                f"Товар: {item.title.title()}\n"
+                f"{discount_info}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
-        elif await app.database.requests.add_order(session, data) is False:
+        else:
             await message.answer("😱 Похоже, у вас уже есть действительный заказ...")
+
         await state.clear()
 
 

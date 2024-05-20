@@ -13,14 +13,20 @@ async def get_editable_item(title):
         return result
 
 
-async def get_pcode(name):
+async def get_all_pcodes():
     async with app.database.models.async_session() as session:
-        result = await session.scalar(
-            sqlalchemy.select(app.database.models.Pcode).where(
-                app.database.models.Pcode.name == name,
-            ),
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Pcode),
         )
-        return result
+        return result.scalars().all()
+
+
+async def get_user_for_id(id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.User).filter_by(id=int(id)),
+        )
+        return result.scalars().first()
 
 
 async def add_pcode(session: sqlalchemy.ext.asyncio.AsyncSession, data):
@@ -93,6 +99,22 @@ async def updata_item_description(
         pass
 
 
+async def update_order_status(
+    session: sqlalchemy.ext.asyncio.AsyncSession,
+    order_id,
+    new_status,
+):
+    try:
+        await session.execute(
+            sqlalchemy.update(app.database.models.Order)
+            .where(app.database.models.Order.id == int(order_id))
+            .values(status=new_status),
+        )
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
 async def updata_item_price(
     session: sqlalchemy.ext.asyncio.AsyncSession,
     item,
@@ -103,6 +125,21 @@ async def updata_item_price(
             sqlalchemy.update(app.database.models.Catalog)
             .where(app.database.models.Catalog.price == item)
             .values(price=int(new_price)),
+        )
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
+async def delete_order(
+    session: sqlalchemy.ext.asyncio.AsyncSession,
+    order_id,
+):
+    try:
+        await session.execute(
+            sqlalchemy.delete(app.database.models.Order).where(
+                app.database.models.Order.id == int(order_id),
+            ),
         )
         await session.commit()
     except sqlalchemy.exc.IntegrityError:

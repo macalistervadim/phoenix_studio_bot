@@ -1,6 +1,7 @@
 import os
 
 import aiogram
+import sqlalchemy
 
 import app.admin.filters
 import app.admin.keyboards
@@ -29,6 +30,158 @@ async def cmd_admin(message: aiogram.types.Message):
 
 @router.message(
     app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Список заказов",
+)
+async def cmd_all_orders(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    orders = await app.database.requests.get_all_orders()
+    if orders:
+        await message.answer(
+            "✅ Вывожу список заказов...\n\n",
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        for i in orders:
+            keyboard = aiogram.utils.keyboard.InlineKeyboardBuilder()
+            keyboard.add(
+                aiogram.types.InlineKeyboardButton(
+                    text="Выбрать",
+                    callback_data=f"order_{str(i.id)}",
+                ),
+            )
+
+            item = await app.database.requests.get_item(i.product)
+            user = await app.database.admin.requests.get_user_for_id(i.user)
+            user_profile_link = (
+                f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
+            )
+            await message.answer(
+                f"<b>Заказ №{i.id}</b>\n\n"
+                f"{item.title.title()}\n"
+                f"{user_profile_link}\n"
+                f"Статус: {i.status.name}\n"
+                f"Создан: {i.created_on}\n",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=keyboard.as_markup(),
+            )
+    else:
+        await message.answer("🚫 К сожалению, заказов нет")
+
+
+@router.callback_query(aiogram.F.data.startswith("order_"))
+async def order_selected(
+    callback: aiogram.types.CallbackQuery,
+    state: aiogram.fsm.context.FSMContext,
+):
+    order = callback.data.replace("order_", "")
+    await state.update_data(order_id=order)
+
+    await callback.message.answer(
+        "♻️ Начинаем процесс редактирования заказа...\n"
+        f"Ваш выбранный заказ - №{order}\n\n"
+        "Выберите, что хотите отредактировать кнопками клавиатуры\n",
+        reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER,
+    )
+    await state.set_state(app.admin.states.EditOrder.order_id)
+
+
+@router.message(app.admin.states.EditOrder.order_id)
+async def order_order_id(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await state.update_data(choice=message.text.lower())
+
+    if message.text == "Сменить статус":
+        await message.answer(
+            "❗️ Выберите на какой статус сменить",
+            reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+        )
+        await state.set_state(app.admin.states.EditOrder.edit_status)
+
+    elif message.text == "Удалить":
+        await message.answer(
+            "❗️ Вы уверены что хотите удалить данный заказ?",
+            reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
+        )
+        await state.set_state(app.admin.states.EditOrder.delete_order)
+
+
+@router.message(app.admin.states.EditOrder.edit_status)
+async def order_edit_status(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    data = await state.get_data()
+    async with app.database.models.async_session() as session:
+        try:
+            await app.database.admin.requests.update_order_status(
+                session,
+                data.get("order_id"),
+                message.text,
+            )
+            await message.answer(
+                f"✅ Вы успшено сменили статус заказа №{data.get('order_id')} на - {message.text}",
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+            )
+            await state.clear()
+        except sqlalchemy.exc.DBAPIError:
+            await message.answer(
+                "❗️ Выберите статус из перечня",
+                reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+            )
+            await state.set_state(app.admin.states.EditOrder.edit_status)
+            return
+
+
+@router.message(app.admin.states.EditOrder.delete_order)
+async def order_delete_order(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    data = await state.get_data()
+    if message.text == "Верно":
+        async with app.database.models.async_session() as session:
+            await app.database.admin.requests.delete_order(
+                session,
+                data.get("order_id"),
+            )
+            await message.answer(f"✅ Вы успешно удалили заказ №{data.get('order_id')}")
+    else:
+        await message.answer("❗️ Понял! Отменяем удаление заказа...")
+
+    await state.clear()
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Список промокодов",
+)
+async def cmd_all_pcodes(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await message.answer(
+        "✅ Вывожу список промокодов...\n\n",
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+    for i in await app.database.admin.requests.get_all_pcodes():
+        await message.answer(
+            f"<b>{i.name}</b>\n"
+            f"Скидка: {i.discount}%\n"
+            f"Кол-во активаций: {i.activations}\n",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        )
+
+    await state.set_state(app.admin.states.DeletePocde.name)
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
     aiogram.F.text == "Удаление промокода",
 )
 async def cmd_delete_pcode(
@@ -52,7 +205,7 @@ async def delete_pcode_name(
 ):
     await state.update_data(name=message.text.lower())
 
-    pcode = await app.database.admin.requests.get_pcode(message.text.lower())
+    pcode = await app.database.requests.get_pcode(message.text.lower())
     await state.update_data(pcode=pcode)
 
     if pcode:

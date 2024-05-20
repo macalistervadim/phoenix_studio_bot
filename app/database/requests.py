@@ -27,6 +27,44 @@ async def update_user(
         pass
 
 
+async def update_pcode(name):
+    async with app.database.models.async_session() as session:
+        await session.execute(
+            sqlalchemy.update(app.database.models.Pcode)
+            .where(app.database.models.Pcode.name == name)
+            .values(activations=app.database.models.Pcode.activations - 1),
+        )
+        await session.commit()
+
+
+async def get_pcode(name):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Pcode).filter_by(name=name),
+        )
+        if result:
+            return result.scalars().first()
+        else:
+            return False
+
+
+async def get_item(id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Catalog).filter_by(id=int(id)),
+        )
+        if result:
+            return result.scalars().first()
+        else:
+            return False
+
+
+async def get_all_orders():
+    async with app.database.models.async_session() as session:
+        result = await session.execute(sqlalchemy.select(app.database.models.Order))
+        return result.scalars().all()
+
+
 async def get_order(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(
