@@ -32,8 +32,8 @@ class User(Base):
     __tablename__ = "user"
 
     tg_id = sqlalchemy.Column(sqlalchemy.BigInteger, unique=True)
-    email = sqlalchemy.Column(sqlalchemy.String, unique=True, nullable=True)
     waiting_order = sqlalchemy.Column(sqlalchemy.Boolean, default=False)
+    waiting_support = sqlalchemy.Column(sqlalchemy.Boolean, default=False)
 
 
 class Catalog(Base):
@@ -58,7 +58,7 @@ class Pcode(Base):
     )
 
 
-class OrderStatusEnum(enum.Enum):
+class StatusEnum(enum.Enum):
     CREATED = "CREATED"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
@@ -79,8 +79,25 @@ class Order(Base):
         unique=True,
     )
     status = sqlalchemy.Column(
-        sqlalchemy.dialects.postgresql.ENUM(OrderStatusEnum, name="order_status_enum"),
-        default=OrderStatusEnum.CREATED,
+        sqlalchemy.dialects.postgresql.ENUM(StatusEnum, name="status_enum"),
+        default=StatusEnum.CREATED,
+    )
+
+
+class Ticket(Base):
+    __tablename__ = "ticket"
+
+    user = sqlalchemy.Column(
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("user.id", ondelete="CASCADE"),
+        index=True,
+    )
+    question = sqlalchemy.Column(
+        sqlalchemy.String,
+    )
+    status = sqlalchemy.Column(
+        sqlalchemy.dialects.postgresql.ENUM(StatusEnum, name="status_enum"),
+        default=StatusEnum.CREATED,
     )
 
 

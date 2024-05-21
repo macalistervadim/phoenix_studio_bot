@@ -93,7 +93,7 @@ class CancelCommand(aiogram.BaseMiddleware):
 
 class CheckWaitingOrder(aiogram.BaseMiddleware):
     """
-    Проверка нахождения пользователя в состоянии ожидания заказа
+    Проверка нахождения пользователя в состоянии ожидания заказа/саппорта
     """
 
     async def __call__(
@@ -112,16 +112,16 @@ class CheckWaitingOrder(aiogram.BaseMiddleware):
             )
 
             if (
-                data["event_update"].message.text == "Отменить заказ"
-                or user.waiting_order is False
+                data["event_update"].message.text != "Отменить заказ"
+                and data["event_update"].message.text != "Закрыть тикет"
+                and (user.waiting_support or user.waiting_order)
             ):
-                return await handler(event, data)
-
-            elif user.waiting_order is True:
                 await event.answer(
-                    app.messages.WAITING_ORDER_MESSAGE,
+                    app.messages.WAITING_ORDER_OR_SUPPORT_MESSAGE,
                     parse_mode=aiogram.enums.ParseMode.HTML,
                 )
+            else:
+                return await handler(event, data)
 
 
 class CheckTime(aiogram.BaseMiddleware):
@@ -140,7 +140,7 @@ class CheckTime(aiogram.BaseMiddleware):
     ) -> typing.Any:
 
         start_time = datetime.time(10, 0)
-        end_time = datetime.time(21, 0)
+        end_time = datetime.time(23, 0)
 
         formatted_start_time = start_time.strftime("%H:%M")
         formatted_end_time = end_time.strftime("%H:%M")

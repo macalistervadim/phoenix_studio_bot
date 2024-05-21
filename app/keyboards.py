@@ -42,3 +42,11 @@ CANCEL_ORDER = aiogram.types.ReplyKeyboardMarkup(
     resize_keyboard=True,
     input_field_placeholder="Выберите пункт меню",
 )
+
+CANCEL_TICKET = aiogram.types.ReplyKeyboardMarkup(
+    keyboard=[
+        [aiogram.types.KeyboardButton(text="Закрыть тикет")],
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Выберите пункт меню",
+)

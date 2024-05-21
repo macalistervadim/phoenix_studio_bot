@@ -1,6 +1,7 @@
 import sqlalchemy
 
 import app.database.models
+import app.database.requests
 
 
 async def add_user(session: sqlalchemy.ext.asyncio.AsyncSession, tg_id):
@@ -37,6 +38,26 @@ async def update_pcode(name):
         await session.commit()
 
 
+async def close_ticket_from_user(user_id):
+    try:
+        async with app.database.models.async_session() as session:
+            await session.execute(
+                sqlalchemy.update(app.database.models.User)
+                .where(app.database.models.User.id == user_id)
+                .values(waiting_support=False),
+            )
+            await session.execute(
+                sqlalchemy.update(app.database.models.Ticket)
+                .where(app.database.models.Ticket.user == user_id)
+                .values(status="COMPLETED"),
+            )
+            await session.commit()
+
+    except sqlalchemy.exc.IntegrityError:
+        await session.rollback()
+        return False
+
+
 async def get_pcode(name):
     async with app.database.models.async_session() as session:
         result = await session.execute(
@@ -63,6 +84,16 @@ async def get_all_orders():
     async with app.database.models.async_session() as session:
         result = await session.execute(sqlalchemy.select(app.database.models.Order))
         return result.scalars().all()
+
+
+async def get_ticket(user_id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Ticket)
+            .filter_by(user=user_id)
+            .filter(app.database.models.Ticket.status == "CREATED"),
+        )
+        return result.scalars().first()
 
 
 async def get_order(user_id):
@@ -122,6 +153,51 @@ async def add_item(session: sqlalchemy.ext.asyncio.AsyncSession, data):
         await session.commit()
     except sqlalchemy.exc.IntegrityError:
         pass
+
+
+async def get_tickets_user(user_id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Ticket).where(
+                (app.database.models.Ticket.user == user_id)
+                & (
+                    sqlalchemy.or_(
+                        app.database.models.Ticket.status == "CREATED",
+                        app.database.models.Ticket.status == "IN_PROGRESS",
+                    )
+                ),
+            ),
+        )
+        return result.scalars().all()
+
+
+async def add_ticket(session: sqlalchemy.ext.asyncio.AsyncSession, data):
+    try:
+        ticket = app.database.models.Ticket(
+            user=data.get("user"),
+            question=data.get("question"),
+        )
+        session.add(ticket)
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        await session.rollback()
+        return None
+
+
+async def update_user_ticket(
+    session: sqlalchemy.ext.asyncio.AsyncSession,
+    tg_id,
+):
+    try:
+        await session.execute(
+            sqlalchemy.update(app.database.models.User)
+            .where(app.database.models.User.tg_id == tg_id)
+            .values(waiting_support=True),
+        )
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        await session.rollback()
+        return None
 
 
 async def get_catalog():

@@ -21,6 +21,59 @@ async def cmd_start(message: aiogram.types.Message):
     )
 
 
+@router.message(aiogram.F.text == "📨 Тех. поддержка")
+async def cmd_create_ticket(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await message.answer(
+        "❗️ Пожалуйста, опишите вашу проблему/вопрос (кратко)",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+
+    await state.set_state(st.CreateTicket.question)
+
+
+@router.message(st.CreateTicket.question)
+async def cmd_create_ticket_question(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    await state.update_data(question=message.text.lower())
+
+    async with app.database.models.async_session() as session:
+        user = await app.database.requests.get_user(message.from_user.id)
+        await state.update_data(user=user.id)
+        data = await state.get_data()
+
+        tickets_user = await app.database.requests.get_tickets_user(user.id)
+
+        if not tickets_user:
+            await app.database.requests.add_ticket(session, data)
+            await app.database.requests.update_user_ticket(
+                session,
+                message.from_user.id,
+            )
+            ticket_id = await app.database.requests.get_ticket(user.id)
+
+            await message.answer(
+                f"♻️ <b>Тикет №{ticket_id.id}</b> успешно создан...\n"
+                "Пожалуйста, ожидайте ответа от Агента Технической поддержки\n\n"
+                "Если вы ошиблись - <b>закройте свой тикет кнопкой ниже</b>",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.CANCEL_TICKET,
+            )
+        else:
+            await message.answer(
+                "❗️ Упс... Кажется у вас уже есть созданный тикет\n",
+                reply_markup=app.keyboards.CANCEL_TICKET,
+            )
+
+    await state.clear()
+
+
 @router.message(aiogram.F.text == "📪 Контакты")
 async def cmd_contacts(message: aiogram.types.Message):
     await message.answer(
@@ -167,6 +220,20 @@ async def cmd_cancel_order(message: aiogram.types.Message):
             )
         else:
             await message.answer("❗️ У вас нет активных заказов")
+
+
+@router.message(aiogram.F.text == "Закрыть тикет")
+async def cmd_close_ticket(message: aiogram.types.Message):
+
+    async with app.database.models.async_session():
+        user = await app.database.requests.get_user(message.from_user.id)
+        await app.database.requests.close_ticket_from_user(user.id)
+
+    await message.answer(
+        "♻️ Ваш тикет <b>успешно закрыт</b>",
+        reply_markup=app.keyboards.MAIN,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
 
 
 @router.message(aiogram.F.text == "✅ Подписался")
