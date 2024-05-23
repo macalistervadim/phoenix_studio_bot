@@ -80,12 +80,6 @@ async def get_item(id):
             return False
 
 
-async def get_all_orders():
-    async with app.database.models.async_session() as session:
-        result = await session.execute(sqlalchemy.select(app.database.models.Order))
-        return result.scalars().all()
-
-
 async def get_ticket(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(

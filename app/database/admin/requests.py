@@ -115,6 +115,22 @@ async def update_order_status(
         pass
 
 
+async def update_ticket_status(
+    session: sqlalchemy.ext.asyncio.AsyncSession,
+    ticket_id,
+    new_status,
+):
+    try:
+        await session.execute(
+            sqlalchemy.update(app.database.models.Ticket)
+            .where(app.database.models.Ticket.id == int(ticket_id))
+            .values(status=new_status),
+        )
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
 async def updata_item_price(
     session: sqlalchemy.ext.asyncio.AsyncSession,
     item,
@@ -131,6 +147,27 @@ async def updata_item_price(
         pass
 
 
+async def get_all_open_tickets():
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Ticket).where(
+                (
+                    sqlalchemy.or_(
+                        app.database.models.Ticket.status == "CREATED",
+                        app.database.models.Ticket.status == "IN_PROGRESS",
+                    )
+                ),
+            ),
+        )
+        return result.scalars().all()
+
+
+async def get_all_orders():
+    async with app.database.models.async_session() as session:
+        result = await session.execute(sqlalchemy.select(app.database.models.Order))
+        return result.scalars().all()
+
+
 async def delete_order(
     session: sqlalchemy.ext.asyncio.AsyncSession,
     order_id,
@@ -139,6 +176,21 @@ async def delete_order(
         await session.execute(
             sqlalchemy.delete(app.database.models.Order).where(
                 app.database.models.Order.id == int(order_id),
+            ),
+        )
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
+async def delete_ticket(
+    session: sqlalchemy.ext.asyncio.AsyncSession,
+    ticket_id,
+):
+    try:
+        await session.execute(
+            sqlalchemy.delete(app.database.models.Ticket).where(
+                app.database.models.Ticket.id == int(ticket_id),
             ),
         )
         await session.commit()

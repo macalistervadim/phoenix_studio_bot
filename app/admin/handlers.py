@@ -30,13 +30,187 @@ async def cmd_admin(message: aiogram.types.Message):
 
 @router.message(
     app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Список тикетов",
+)
+async def cmd_get_tickets(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    async with app.database.models.async_session():
+        tickets = await app.database.admin.requests.get_all_open_tickets()
+        if tickets:
+            await message.answer(
+                "✅ Вывожу список активных тикетов...\n\n",
+                reply_markup=app.keyboards.CANCEL_OR_BACK,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+            for i in tickets:
+                keyboard = aiogram.utils.keyboard.InlineKeyboardBuilder()
+                keyboard.add(
+                    aiogram.types.InlineKeyboardButton(
+                        text="Выбрать",
+                        callback_data=f"ticket_{str(i.id)}",
+                    ),
+                )
+
+                user = await app.database.admin.requests.get_user_for_id(i.user)
+                await state.update_data(user=user)
+                user_profile_link = (
+                    f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
+                )
+
+                await message.answer(
+                    f"<b>Тикет №{i.id}</b>\n\n"
+                    f"{i.question}\n"
+                    f"{user_profile_link}\n"
+                    f"Статус: {i.status.name}\n"
+                    f"Создан: {i.created_on}\n",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
+                    reply_markup=keyboard.as_markup(),
+                )
+        else:
+            await message.answer("🚫 К сожалению, активных тикетов нет")
+
+
+@router.callback_query(aiogram.F.data.startswith("ticket_"))
+async def ticket_selected(
+    callback: aiogram.types.CallbackQuery,
+    state: aiogram.fsm.context.FSMContext,
+):
+    ticket = callback.data.replace("ticket_", "")
+    await state.update_data(ticket_id=ticket)
+
+    await callback.message.answer(
+        "♻️ Начинаем процесс редактирования тикета...\n"
+        f"Ваш выбранный тикет - №{ticket}\n\n"
+        "Выберите, что хотите отредактировать кнопками клавиатуры\n",
+        reply_markup=app.admin.keyboards.CHOICE_EDIT_TICKET,
+    )
+    await state.set_state(app.admin.states.EditTicket.ticket_id)
+
+
+@router.message(app.admin.states.EditTicket.ticket_id)
+async def ticket_ticket_id(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await state.update_data(choice=message.text.lower())
+
+    if message.text == "Сменить статус":
+        await message.answer(
+            "❗️ Выберите на какой статус сменить",
+            reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+        )
+        await state.set_state(app.admin.states.EditTicket.edit_status)
+
+    elif message.text == "Удалить":
+        await message.answer(
+            "❗️ Вы уверены что хотите удалить данный тикет?",
+            reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
+        )
+        await state.set_state(app.admin.states.EditTicket.delete_ticket)
+
+    elif message.text == "Ответить":
+        await message.answer(
+            "❗️ Введите ответ пользователю:",
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+        )
+        await state.set_state(app.admin.states.EditTicket.answer_ticket)
+
+
+@router.message(app.admin.states.EditTicket.edit_status)
+async def ticket_edit_status(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    data = await state.get_data()
+
+    async with app.database.models.async_session() as session:
+        try:
+            await app.database.admin.requests.update_ticket_status(
+                session,
+                data.get("ticket_id"),
+                message.text,
+            )
+            await message.answer(
+                f"✅ Вы успшено сменили статус тикета №{data.get('ticket_id')} на - {message.text}",
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+            )
+            await state.clear()
+        except sqlalchemy.exc.DBAPIError:
+            await message.answer(
+                "❗️ Выберите статус из перечня",
+                reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+            )
+            await state.set_state(app.admin.states.EditOrder.edit_status)
+            return
+
+
+@router.message(app.admin.states.EditTicket.delete_ticket)
+async def ticket_delete_ticket(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    data = await state.get_data()
+
+    if message.text == "Верно":
+        async with app.database.models.async_session() as session:
+            await app.database.admin.requests.delete_ticket(
+                session,
+                data.get("ticket_id"),
+            )
+            await message.answer(
+                f"✅ Вы успешно удалили тикет №{data.get('ticket_id')}",
+            )
+    else:
+        await message.answer("❗️ Понял! Отменяем удаление тикета...")
+
+    await state.clear()
+
+
+@router.message(app.admin.states.EditTicket.answer_ticket)
+async def ticket_answer_ticket(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    data = await state.get_data()
+
+    async with app.database.models.async_session() as session:
+        try:
+            await bot.send_message(
+                data.get("user").tg_id,
+                "❗️ <b>Вам пришло новое сообщение от Агента Поддержки</b>\n\n"
+                f"{message.text}",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+            await app.database.admin.requests.update_ticket_status(
+                session,
+                data.get("ticket_id"),
+                "IN_PROGRESS",
+            )
+            await message.answer(
+                f"✅ Сообщение отправлено пользователю тикета №{data.get('ticket_id')}",
+            )
+
+        except AttributeError:
+            await message.answer(
+                f"🚫 Сообщение не отправлено пользователю тикета №{data.get('ticket_id')}\n"
+                "Попробуйте повторно запросить список активных тикетов и повторите попытку дать ответ",
+            )
+
+    await state.clear()
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
     aiogram.F.text == "Список заказов",
 )
 async def cmd_all_orders(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
 ):
-    orders = await app.database.requests.get_all_orders()
+    orders = await app.database.admin.requests.get_all_orders()
     if orders:
         await message.answer(
             "✅ Вывожу список заказов...\n\n",
@@ -163,21 +337,27 @@ async def cmd_all_pcodes(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
 ):
-    await message.answer(
-        "✅ Вывожу список промокодов...\n\n",
-        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
-        parse_mode=aiogram.enums.ParseMode.HTML,
-    )
-    for i in await app.database.admin.requests.get_all_pcodes():
-        await message.answer(
-            f"<b>{i.name}</b>\n"
-            f"Скидка: {i.discount}%\n"
-            f"Кол-во активаций: {i.activations}\n",
-            parse_mode=aiogram.enums.ParseMode.HTML,
-            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
-        )
+    async with app.database.models.async_session():
+        pcodes = await app.database.admin.requests.get_all_pcodes()
 
-    await state.set_state(app.admin.states.DeletePocde.name)
+        if pcodes:
+            await message.answer(
+                "✅ Вывожу список промокодов...\n\n",
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+            for i in await app.database.admin.requests.get_all_pcodes():
+                await message.answer(
+                    f"<b>{i.name}</b>\n"
+                    f"Скидка: {i.discount}%\n"
+                    f"Кол-во активаций: {i.activations}\n",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
+                    reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                )
+
+            await state.set_state(app.admin.states.DeletePocde.name)
+        else:
+            await message.answer("🚫 К сожалению, промокодов нет")
 
 
 @router.message(

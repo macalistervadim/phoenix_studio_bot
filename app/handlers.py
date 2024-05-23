@@ -63,12 +63,22 @@ async def cmd_create_ticket_question(
                 "Пожалуйста, ожидайте ответа от Агента Технической поддержки\n\n"
                 "Если вы ошиблись - <b>закройте свой тикет кнопкой ниже</b>",
                 parse_mode=aiogram.enums.ParseMode.HTML,
-                reply_markup=app.keyboards.CANCEL_TICKET,
+                reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
             )
+
+            user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+            await bot.send_message(
+                os.getenv("ADMIN_ID", "no_admin"),
+                f"❗️ Пришел новый <b>тикет №{ticket_id.id}</b>\n"
+                f"{user_profile_link}\n"
+                f"Сообщение: {message.text}",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+
         else:
             await message.answer(
                 "❗️ Упс... Кажется у вас уже есть созданный тикет\n",
-                reply_markup=app.keyboards.CANCEL_TICKET,
+                reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
             )
 
     await state.clear()
@@ -183,7 +193,7 @@ async def order_create_description(
             await message.answer(
                 app.messages.SUCC_CREATE_ORDER_MESSAGE,
                 parse_mode=aiogram.enums.ParseMode.HTML,
-                reply_markup=app.keyboards.CANCEL_ORDER,
+                reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
             )
 
             user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'

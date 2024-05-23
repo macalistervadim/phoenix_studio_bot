@@ -37,3 +37,10 @@ class EditOrder(aiogram.fsm.state.StatesGroup):
     edit_status = aiogram.fsm.state.State()
     delete_order = aiogram.fsm.state.State()
     edit_object = aiogram.fsm.state.State()
+
+
+class EditTicket(aiogram.fsm.state.StatesGroup):
+    ticket_id = aiogram.fsm.state.State()
+    edit_status = aiogram.fsm.state.State()
+    delete_ticket = aiogram.fsm.state.State()
+    answer_ticket = aiogram.fsm.state.State()

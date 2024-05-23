@@ -119,6 +119,7 @@ class CheckWaitingOrder(aiogram.BaseMiddleware):
                 await event.answer(
                     app.messages.WAITING_ORDER_OR_SUPPORT_MESSAGE,
                     parse_mode=aiogram.enums.ParseMode.HTML,
+                    reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
                 )
             else:
                 return await handler(event, data)
