@@ -84,6 +84,25 @@ class Order(Base):
     )
 
 
+class GiftCard(Base):
+    __tablename__ = "giftcard"
+
+    name = sqlalchemy.Column(sqlalchemy.String(50), unique=True, nullable=True)
+    amount = sqlalchemy.Column(sqlalchemy.Integer)
+    owner = sqlalchemy.Column(
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("user.id", ondelete="CASCADE"),
+    )
+    status = sqlalchemy.Column(
+        sqlalchemy.dialects.postgresql.ENUM(StatusEnum, name="status_enum"),
+        default=StatusEnum.CREATED,
+    )
+    is_active = sqlalchemy.Column(
+        sqlalchemy.Boolean,
+        default=False,
+    )
+
+
 class Ticket(Base):
     __tablename__ = "ticket"
 

@@ -7,6 +7,7 @@ import app.database.requests
 import app.keyboards
 import app.messages
 import app.states as st
+import app.states
 
 
 router = aiogram.Router()
@@ -33,6 +34,121 @@ async def cmd_create_ticket(
     )
 
     await state.set_state(st.CreateTicket.question)
+
+
+@router.message(aiogram.F.text == "🎁 Подарочные сертификаты")
+async def cmd_giftcards(
+    message: aiogram.types.Message,
+):
+    await message.answer(
+        app.messages.GIFT_CARDS,
+        reply_markup=app.keyboards.GIFT_CARDS,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+
+
+@router.message(aiogram.F.text == "📬 Создать сертификат")
+async def cmd_create_giftcard(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await message.answer(
+        "♻️ Для создания подарочного сертификата, пожалуйста, укажите сумму будущего сертификата (500-25000 руб.)\n"
+        "Не указывайте любые другие символы, кроме цифр - иначе бот выдаст ошибку",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+
+    await state.set_state(st.CreateGiftCard.amount)
+
+
+@router.message(st.CreateGiftCard.amount)
+async def cmd_create_giftcard_amount(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    if 500 <= int(message.text) <= 25000:
+        await state.update_data(amount=message.text.lower())
+        await message.answer(
+            f"♻️ Теперь необходимо оплатить сумму сертификата: {message.text} руб. Пересылаю вам реквизиты...\n\n"
+            "После оплаты вам необходимо прикрепить соответствующий скриншот с платежом - после чего, я переведу"
+            " вас на Агента поддержки, который выдаст вам код от сертификата",
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        await message.answer(
+            app.messages.PAYMENT,
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+        await state.set_state(st.CreateGiftCard.sckreenshot)
+    else:
+        await message.answer(
+            "❗️ Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+        )
+        await state.set_state(st.CreateGiftCard.amount)
+        return
+
+
+@router.message(aiogram.F.photo, st.CreateGiftCard.sckreenshot)
+async def cmd_create_giftcard_sckreenshot(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    async with app.database.models.async_session() as session:
+        await state.update_data(sckreen=message.photo[-2].file_id)
+
+        owner = await app.database.requests.get_user(message.from_user.id)
+        await state.update_data(owner=owner.id)
+
+        data = await state.get_data()
+        await app.database.requests.add_giftcard(session, data)
+
+        user_profile_link = (
+            f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+        )
+        await bot.send_message(
+            os.getenv("ADMIN_ID", "no_admin"),
+            f"❗️ Создайте новый подарочный сертификат на сумму {data.get('amount')} руб."
+            " и выдайте пользователю: \n"
+            f"{user_profile_link}",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        await bot.send_photo(os.getenv("ADMIN_ID", "no_admin"), data.get("sckreen"))
+
+        await message.answer(
+            "✅ Вы отметили, что <b>выполнили оплату</b>...\n\n"
+            "Я уже передал информацию Агенту Поддержки. Скоро он <b>свяжется с вами и выдаст код</b> от сертификата.\n"
+            "💚 Спасибо, что доверяете PHOENIX STUDIO",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        await state.clear()
+
+
+@router.message(aiogram.F.text == "🎀 Мои сертификаты")
+async def cmd_mygiftcards(message: aiogram.types.Message):
+    async with app.database.models.async_session():
+        user = await app.database.requests.get_user(message.from_user.id)
+        giftcards_user = await app.database.requests.get_giftcards_user(user.id)
+        if giftcards_user:
+            await message.answer(
+                "♻️ Вывожу ваши подарочные карты...",
+                reply_markup=app.keyboards.MAIN,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+            for i in giftcards_user:
+                name = f"{i.name}" if i.name else "Не активирован"
+                is_active = "Да" if i.is_active else "Нет"
+                await message.answer(
+                    f"<b>{name}</b>\n"
+                    f"Сумма: {i.amount} руб.\n"
+                    f"Активирован: {is_active}",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
+                )
+        else:
+            await message.answer("🚫 У вас нет подарочных сертификатов")
 
 
 @router.message(st.CreateTicket.question)

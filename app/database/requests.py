@@ -149,6 +149,34 @@ async def add_item(session: sqlalchemy.ext.asyncio.AsyncSession, data):
         pass
 
 
+async def add_giftcard(session: sqlalchemy.ext.asyncio.AsyncSession, data):
+    try:
+        giftcard = app.database.models.GiftCard(
+            amount=int(data.get("amount")),
+            owner=data.get("owner"),
+        )
+        session.add(giftcard)
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
+async def get_giftcards_user(user_id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.GiftCard).where(
+                (app.database.models.GiftCard.owner == user_id)
+                & (
+                    sqlalchemy.or_(
+                        app.database.models.Ticket.status == "CREATED",
+                        app.database.models.Ticket.status == "COMPLETED",
+                    )
+                ),
+            ),
+        )
+        return result.scalars().all()
+
+
 async def get_tickets_user(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(

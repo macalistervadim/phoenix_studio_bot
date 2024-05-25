@@ -1,6 +1,6 @@
 [flake8]
 application_import_names = app
 inline-quotes = double
-exclude = .git, __pycache__, venv
+exclude = .git, __pycache__, venv, messages.py
 import-order-style = google
 max-line-length = 120

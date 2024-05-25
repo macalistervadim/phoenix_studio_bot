@@ -7,3 +7,8 @@ class CreateOrder(aiogram.fsm.state.StatesGroup):
 
 class CreateTicket(aiogram.fsm.state.StatesGroup):
     question = aiogram.fsm.state.State()
+
+
+class CreateGiftCard(aiogram.fsm.state.StatesGroup):
+    amount = aiogram.fsm.state.State()
+    sckreenshot = aiogram.fsm.state.State()
