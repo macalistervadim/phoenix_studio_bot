@@ -31,10 +31,7 @@ class ChechSubUser(aiogram.BaseMiddleware):
             chat_id=os.getenv("TG_CHANNEL_ID", "-1002064780409"),
             user_id=data["event_from_user"].id,
         )
-        if (
-            user_channel_status.status != "left"
-            or data["event_update"].message.text == "/start"
-        ):
+        if user_channel_status.status != "left" or data["event_update"].message.text == "/start":
             return await handler(event, data)
 
         await event.answer(

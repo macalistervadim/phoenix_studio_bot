@@ -29,6 +29,63 @@ async def cmd_admin(message: aiogram.types.Message):
     )
 
 
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Создание гифта(-ов)",
+)
+async def cmd_admin_create_gift(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await message.answer("❗️ Введите количество создаваемых гифтов")
+
+    await state.set_state(app.admin.states.AdminCreateGiftCard.count)
+
+
+@router.message(app.admin.states.AdminCreateGiftCard.count)
+async def cmd_admin_create_gift_count(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await state.update_data(count=message.text)
+
+    await message.answer("❗️ Теперь укажите сумму подарочных сертификатов")
+
+    await state.set_state(app.admin.states.AdminCreateGiftCard.amount)
+
+
+@router.message(app.admin.states.AdminCreateGiftCard.amount)
+async def cmd_admin_create_gift_amount(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    if 500 <= int(message.text) <= 25000:
+        await state.update_data(amount=message.text)
+
+        owner = await app.database.requests.get_user(message.from_user.id)
+        await state.update_data(owner=owner.id)
+
+        async with app.database.models.async_session() as session:
+            data = await state.get_data()
+            for i in range(int(data.get("count"))):
+                gift = await app.database.admin.requests.add_admin_giftcard(
+                    session,
+                    data,
+                )
+
+                await message.answer(
+                    f"✅ Вы успешно создали подарочный сертификат №{gift.id}",
+                    reply_markup=app.keyboards.GIFT_CARDS,
+                )
+        await state.clear()
+    else:
+        await message.answer(
+            "❗️ Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+        )
+        await state.set_state(app.admin.states.AdminCreateGiftCard.amount)
+        return
+
+
 @router.callback_query(aiogram.F.data.startswith("gift_"))
 async def gift_selected(
     callback: aiogram.types.CallbackQuery,
@@ -39,7 +96,9 @@ async def gift_selected(
 
     async with app.database.models.async_session() as session:
         await app.database.admin.requests.confirm_giftcard(
-            session, int(gift), new_gift_name,
+            session,
+            int(gift),
+            new_gift_name,
         )
         await callback.message.delete()
         await callback.message.answer(
@@ -87,9 +146,7 @@ async def cmd_get_tickets(
 
                 user = await app.database.admin.requests.get_user_for_id(i.user)
                 await state.update_data(user=user)
-                user_profile_link = (
-                    f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
-                )
+                user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
 
                 await message.answer(
                     f"<b>Тикет №{i.id}</b>\n\n"
@@ -183,8 +240,7 @@ async def ticket_answer_ticket(
         try:
             await bot.send_message(
                 data.get("user").tg_id,
-                "❗️ <b>Вам пришло новое сообщение от Агента Поддержки</b>\n\n"
-                f"{message.text}",
+                "❗️ <b>Вам пришло новое сообщение от Агента Поддержки</b>\n\n" f"{message.text}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
             await app.database.admin.requests.update_ticket_status(
@@ -231,9 +287,7 @@ async def cmd_all_orders(
 
             item = await app.database.requests.get_item(i.product)
             user = await app.database.admin.requests.get_user_for_id(i.user)
-            user_profile_link = (
-                f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
-            )
+            user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
             await message.answer(
                 f"<b>Заказ №{i.id}</b>\n\n"
                 f"{item.title.title()}\n"
@@ -306,25 +360,6 @@ async def order_edit_status(
             return
 
 
-@router.message(app.admin.states.EditOrder.delete_order)
-async def order_delete_order(
-    message: aiogram.types.Message,
-    state: aiogram.fsm.context.FSMContext,
-):
-    data = await state.get_data()
-    if message.text == "Верно":
-        async with app.database.models.async_session() as session:
-            await app.database.admin.requests.delete_order(
-                session,
-                data.get("order_id"),
-            )
-            await message.answer(f"✅ Вы успешно удалили заказ №{data.get('order_id')}")
-    else:
-        await message.answer("❗️ Понял! Отменяем удаление заказа...")
-
-    await state.clear()
-
-
 @router.message(
     app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
     aiogram.F.text == "Список промокодов",
@@ -344,9 +379,7 @@ async def cmd_all_pcodes(
             )
             for i in await app.database.admin.requests.get_all_pcodes():
                 await message.answer(
-                    f"<b>{i.name}</b>\n"
-                    f"Скидка: {i.discount}%\n"
-                    f"Кол-во активаций: {i.activations}\n",
+                    f"<b>{i.name}</b>\n" f"Скидка: {i.discount}%\n" f"Кол-во активаций: {i.activations}\n",
                     parse_mode=aiogram.enums.ParseMode.HTML,
                     reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
                 )
@@ -365,8 +398,7 @@ async def cmd_delete_pcode(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс удаления промокода...\n\n"
-        "Укажите название промокода, который хотите удалить:",
+        "❗️ Начинаем процесс удаления промокода...\n\n" "Укажите название промокода, который хотите удалить:",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -434,8 +466,7 @@ async def cmd_create_pcode(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс создания нового промокода...\n\n"
-        "Укажите название промокода:",
+        "❗️ Начинаем процесс создания нового промокода...\n\n" "Укажите название промокода:",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -500,8 +531,7 @@ async def cmd_delete_item(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс удаления товара/услуги...\n\n"
-        "Укажите название товара, который хотите удалить:",
+        "❗️ Начинаем процесс удаления товара/услуги...\n\n" "Укажите название товара, который хотите удалить:",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -691,8 +721,7 @@ async def edit_item_editable_object(
     if message.text == "5":
         await message.answer_photo(object.image)
         await message.answer(
-            "✅ Ваш выбранный элемент - 5) Фотография\n\n"
-            "❗️ Теперь отправьте новую фотографию для товара",
+            "✅ Ваш выбранный элемент - 5) Фотография\n\n" "❗️ Теперь отправьте новую фотографию для товара",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
@@ -773,8 +802,7 @@ async def cmd_create_item(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс создания нового товара/услуги...\n"
-        "Введите название нового товара:",
+        "❗️ Начинаем процесс создания нового товара/услуги...\n" "Введите название нового товара:",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )

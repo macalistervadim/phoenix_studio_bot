@@ -135,7 +135,7 @@ async def cmd_create_giftcard_screenshot(
             await message.answer(
                 "✅ Вы отметили, что <b>выполнили оплату</b>...\n\n"
                 "Я уже передал информацию Агенту Поддержки. Скоро он <b>свяжется с вами и выдаст код</b>"
-                " от сертификата на сумму: {data.get('amount')} руб.\n\n"
+                f" от сертификата на сумму: {data.get('amount')} руб.\n\n"
                 "💚 Спасибо, что доверяете PHOENIX STUDIO\n",
                 parse_mode=aiogram.enums.ParseMode.HTML,
                 reply_markup=app.keyboards.MAIN,
@@ -156,8 +156,8 @@ async def cmd_mygiftcards(message: aiogram.types.Message):
         active_giftcards_user = await app.database.requests.get_active_giftcards_user(
             user.id,
         )
-        inactive_giftcards_user = (
-            await app.database.requests.get_inactive_giftcards_user(user.id),
+        inactive_giftcards_user = await app.database.requests.get_inactive_giftcards_user(
+            user.id,
         )
 
         if active_giftcards_user or inactive_giftcards_user:
@@ -222,9 +222,7 @@ async def cmd_create_ticket_question(
             user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
             await bot.send_message(
                 os.getenv("ADMIN_ID", "no_admin"),
-                f"❗️ Пришел новый <b>тикет №{ticket_id.id}</b>\n"
-                f"{user_profile_link}\n"
-                f"Сообщение: {message.text}",
+                f"❗️ Пришел новый <b>тикет №{ticket_id.id}</b>\n" f"{user_profile_link}\n" f"Сообщение: {message.text}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
 
@@ -350,17 +348,11 @@ async def order_create_description(
             )
 
             user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
-            discount_info = (
-                f"ПРОМОКОД: {data.get('pcode')} - {pcode.discount}% скидки"
-                if pcode
-                else ""
-            )
+            discount_info = f"ПРОМОКОД: {data.get('pcode')} - {pcode.discount}% скидки" if pcode else ""
             item = await app.database.requests.get_item(data.get("item_id"))
             await bot.send_message(
                 os.getenv("ADMIN_ID", "admin_id"),
-                f"❗️ Пришел новый заказ\n\n{user_profile_link}\n"
-                f"Товар: {item.title.title()}\n"
-                f"{discount_info}",
+                f"❗️ Пришел новый заказ\n\n{user_profile_link}\n" f"Товар: {item.title.title()}\n" f"{discount_info}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
         else:

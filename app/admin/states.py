@@ -35,12 +35,15 @@ class DeletePocde(aiogram.fsm.state.StatesGroup):
 class EditOrder(aiogram.fsm.state.StatesGroup):
     order_id = aiogram.fsm.state.State()
     edit_status = aiogram.fsm.state.State()
-    delete_order = aiogram.fsm.state.State()
     edit_object = aiogram.fsm.state.State()
 
 
 class EditTicket(aiogram.fsm.state.StatesGroup):
     ticket_id = aiogram.fsm.state.State()
     edit_status = aiogram.fsm.state.State()
-    delete_ticket = aiogram.fsm.state.State()
     answer_ticket = aiogram.fsm.state.State()
+
+
+class AdminCreateGiftCard(aiogram.fsm.state.StatesGroup):
+    count = aiogram.fsm.state.State()
+    amount = aiogram.fsm.state.State()

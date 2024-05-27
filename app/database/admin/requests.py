@@ -1,3 +1,5 @@
+import uuid
+
 import sqlalchemy
 
 import app.database.models
@@ -160,6 +162,22 @@ async def get_all_open_tickets():
             ),
         )
         return result.scalars().all()
+
+
+async def add_admin_giftcard(session: sqlalchemy.ext.asyncio.AsyncSession, data):
+    try:
+        giftcard = app.database.models.GiftCard(
+            amount=int(data.get("amount")),
+            owner=data.get("owner"),
+            name=uuid.uuid4().hex,
+            status="COMPLETED",
+        )
+        session.add(giftcard)
+        await session.commit()
+        await session.refresh(giftcard)
+        return giftcard
+    except sqlalchemy.exc.IntegrityError:
+        return None
 
 
 async def get_all_orders():

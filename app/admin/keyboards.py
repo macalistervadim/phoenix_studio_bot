@@ -17,6 +17,9 @@ ADMIN_COMMANDS = aiogram.types.ReplyKeyboardMarkup(
             aiogram.types.KeyboardButton(text="Список заказов"),
             aiogram.types.KeyboardButton(text="Список тикетов"),
         ],
+        [
+            aiogram.types.KeyboardButton(text="Создание гифта(-ов)"),
+        ],
     ],
     row_width=3,
     resize_keyboard=True,
