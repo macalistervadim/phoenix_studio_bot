@@ -87,7 +87,7 @@ class Order(Base):
 class GiftCard(Base):
     __tablename__ = "giftcard"
 
-    name = sqlalchemy.Column(sqlalchemy.String(50), unique=True, nullable=True)
+    name = sqlalchemy.Column(sqlalchemy.String, unique=True, nullable=True)
     amount = sqlalchemy.Column(sqlalchemy.Integer)
     owner = sqlalchemy.Column(
         sqlalchemy.Integer,

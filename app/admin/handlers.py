@@ -1,4 +1,5 @@
 import os
+import uuid
 
 import aiogram
 import sqlalchemy
@@ -26,6 +27,37 @@ async def cmd_admin(message: aiogram.types.Message):
         reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
+
+
+@router.callback_query(aiogram.F.data.startswith("gift_"))
+async def gift_selected(
+    callback: aiogram.types.CallbackQuery,
+    bot: aiogram.Bot,
+):
+    gift = callback.data.replace("gift_", "")
+    new_gift_name = uuid.uuid4().hex
+
+    async with app.database.models.async_session() as session:
+        await app.database.admin.requests.confirm_giftcard(
+            session, int(gift), new_gift_name,
+        )
+        await callback.message.delete()
+        await callback.message.answer(
+            f"✅ Вы подтвердили выдачу подарочного сертификата №{gift}",
+        )
+
+        gift_user = await app.database.requests.get_gift(int(gift))
+        get_gift_user = await app.database.admin.requests.get_user_for_id(
+            gift_user.owner,
+        )
+        await bot.send_message(
+            get_gift_user.tg_id,
+            "✅ <b>Оповещение</b>\n\n"
+            "Агент Технической поддержки подтвердил выдачу подарочного сертификата."
+            "Теперь вы можете посмотреть его в  <b>'Моих сертификатах'</b>",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.GIFT_CARDS,
+        )
 
 
 @router.message(
@@ -103,13 +135,6 @@ async def ticket_ticket_id(
         )
         await state.set_state(app.admin.states.EditTicket.edit_status)
 
-    elif message.text == "Удалить":
-        await message.answer(
-            "❗️ Вы уверены что хотите удалить данный тикет?",
-            reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
-        )
-        await state.set_state(app.admin.states.EditTicket.delete_ticket)
-
     elif message.text == "Ответить":
         await message.answer(
             "❗️ Введите ответ пользователю:",
@@ -144,28 +169,6 @@ async def ticket_edit_status(
             )
             await state.set_state(app.admin.states.EditOrder.edit_status)
             return
-
-
-@router.message(app.admin.states.EditTicket.delete_ticket)
-async def ticket_delete_ticket(
-    message: aiogram.types.Message,
-    state: aiogram.fsm.context.FSMContext,
-):
-    data = await state.get_data()
-
-    if message.text == "Верно":
-        async with app.database.models.async_session() as session:
-            await app.database.admin.requests.delete_ticket(
-                session,
-                data.get("ticket_id"),
-            )
-            await message.answer(
-                f"✅ Вы успешно удалили тикет №{data.get('ticket_id')}",
-            )
-    else:
-        await message.answer("❗️ Понял! Отменяем удаление тикета...")
-
-    await state.clear()
 
 
 @router.message(app.admin.states.EditTicket.answer_ticket)
@@ -274,13 +277,6 @@ async def order_order_id(
             reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
         )
         await state.set_state(app.admin.states.EditOrder.edit_status)
-
-    elif message.text == "Удалить":
-        await message.answer(
-            "❗️ Вы уверены что хотите удалить данный заказ?",
-            reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
-        )
-        await state.set_state(app.admin.states.EditOrder.delete_order)
 
 
 @router.message(app.admin.states.EditOrder.edit_status)

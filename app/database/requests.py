@@ -157,19 +157,35 @@ async def add_giftcard(session: sqlalchemy.ext.asyncio.AsyncSession, data):
         )
         session.add(giftcard)
         await session.commit()
+        await session.refresh(giftcard)
+        return giftcard
     except sqlalchemy.exc.IntegrityError:
-        pass
+        return None
 
 
-async def get_giftcards_user(user_id):
+async def get_active_giftcards_user(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(
             sqlalchemy.select(app.database.models.GiftCard).where(
                 (app.database.models.GiftCard.owner == user_id)
                 & (
                     sqlalchemy.or_(
-                        app.database.models.Ticket.status == "CREATED",
-                        app.database.models.Ticket.status == "COMPLETED",
+                        app.database.models.GiftCard.status == "COMPLETED",
+                    )
+                ),
+            ),
+        )
+        return result.scalars().all()
+
+
+async def get_inactive_giftcards_user(user_id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.GiftCard).where(
+                (app.database.models.GiftCard.owner == user_id)
+                & (
+                    sqlalchemy.or_(
+                        app.database.models.GiftCard.status == "CREATED",
                     )
                 ),
             ),
@@ -233,6 +249,16 @@ async def get_user(tg_id):
         result = await session.scalar(
             sqlalchemy.select(app.database.models.User).where(
                 app.database.models.User.tg_id == tg_id,
+            ),
+        )
+        return result
+
+
+async def get_gift(gift_id):
+    async with app.database.models.async_session() as session:
+        result = await session.scalar(
+            sqlalchemy.select(app.database.models.GiftCard).where(
+                app.database.models.GiftCard.id == gift_id,
             ),
         )
         return result

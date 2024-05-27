@@ -35,7 +35,6 @@ CHOICE_EDIT_ITEM = aiogram.types.ReplyKeyboardMarkup(
 CHOICE_EDIT_ORDER = aiogram.types.ReplyKeyboardMarkup(
     keyboard=[
         [aiogram.types.KeyboardButton(text="Сменить статус")],
-        [aiogram.types.KeyboardButton(text="Удалить")],
     ],
     resize_keyboard=True,
     input_field_placeholder="Выберите пункт меню",
@@ -54,7 +53,6 @@ CHOICE_EDIT_ORDER_STATUS = aiogram.types.ReplyKeyboardMarkup(
 CHOICE_EDIT_TICKET = aiogram.types.ReplyKeyboardMarkup(
     keyboard=[
         [aiogram.types.KeyboardButton(text="Сменить статус")],
-        [aiogram.types.KeyboardButton(text="Удалить")],
         [aiogram.types.KeyboardButton(text="Ответить")],
     ],
     resize_keyboard=True,

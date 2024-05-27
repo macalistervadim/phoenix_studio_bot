@@ -168,36 +168,6 @@ async def get_all_orders():
         return result.scalars().all()
 
 
-async def delete_order(
-    session: sqlalchemy.ext.asyncio.AsyncSession,
-    order_id,
-):
-    try:
-        await session.execute(
-            sqlalchemy.delete(app.database.models.Order).where(
-                app.database.models.Order.id == int(order_id),
-            ),
-        )
-        await session.commit()
-    except sqlalchemy.exc.IntegrityError:
-        pass
-
-
-async def delete_ticket(
-    session: sqlalchemy.ext.asyncio.AsyncSession,
-    ticket_id,
-):
-    try:
-        await session.execute(
-            sqlalchemy.delete(app.database.models.Ticket).where(
-                app.database.models.Ticket.id == int(ticket_id),
-            ),
-        )
-        await session.commit()
-    except sqlalchemy.exc.IntegrityError:
-        pass
-
-
 async def updata_item_deadline(
     session: sqlalchemy.ext.asyncio.AsyncSession,
     item,
@@ -208,6 +178,22 @@ async def updata_item_deadline(
             sqlalchemy.update(app.database.models.Catalog)
             .where(app.database.models.Catalog.deadline == item)
             .values(price=int(new_deadline)),
+        )
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
+async def confirm_giftcard(
+    session: sqlalchemy.ext.asyncio.AsyncSession,
+    giftcard_id,
+    new_name,
+):
+    try:
+        await session.execute(
+            sqlalchemy.update(app.database.models.GiftCard)
+            .where(app.database.models.GiftCard.id == giftcard_id)
+            .values(name=new_name, status="COMPLETED"),
         )
         await session.commit()
     except sqlalchemy.exc.IntegrityError:

@@ -92,38 +92,60 @@ async def cmd_create_giftcard_amount(
 
 
 @router.message(aiogram.F.photo, st.CreateGiftCard.sckreenshot)
-async def cmd_create_giftcard_sckreenshot(
+async def cmd_create_giftcard_screenshot(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
     bot: aiogram.Bot,
 ):
     async with app.database.models.async_session() as session:
-        await state.update_data(sckreen=message.photo[-2].file_id)
+        await state.update_data(sckreen=message.photo[-1].file_id)
 
         owner = await app.database.requests.get_user(message.from_user.id)
         await state.update_data(owner=owner.id)
 
-        data = await state.get_data()
-        await app.database.requests.add_giftcard(session, data)
+        gift_cards = await app.database.requests.get_inactive_giftcards_user(owner.id)
+        if not gift_cards:
+            data = await state.get_data()
+            new_gift = await app.database.requests.add_giftcard(session, data)
+            session.commit()
 
-        user_profile_link = (
-            f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
-        )
-        await bot.send_message(
-            os.getenv("ADMIN_ID", "no_admin"),
-            f"❗️ Создайте новый подарочный сертификат на сумму {data.get('amount')} руб."
-            " и выдайте пользователю: \n"
-            f"{user_profile_link}",
-            parse_mode=aiogram.enums.ParseMode.HTML,
-        )
-        await bot.send_photo(os.getenv("ADMIN_ID", "no_admin"), data.get("sckreen"))
+            keyboard = aiogram.utils.keyboard.InlineKeyboardBuilder()
+            keyboard.add(
+                aiogram.types.InlineKeyboardButton(
+                    text="Подтвердить выдачу",
+                    callback_data=f"gift_{str(new_gift.id)}",
+                ),
+            )
 
-        await message.answer(
-            "✅ Вы отметили, что <b>выполнили оплату</b>...\n\n"
-            "Я уже передал информацию Агенту Поддержки. Скоро он <b>свяжется с вами и выдаст код</b> от сертификата.\n"
-            "💚 Спасибо, что доверяете PHOENIX STUDIO",
-            parse_mode=aiogram.enums.ParseMode.HTML,
-        )
+            user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+            admin_id = os.getenv("ADMIN_ID", "no_admin")
+            caption = (
+                f"❗️ Подтвердите выдачу подарочного сертификат на сумму {data.get('amount')} руб."
+                f" и выдайте пользователю: {user_profile_link}\n"
+            )
+
+            await bot.send_photo(
+                chat_id=admin_id,
+                photo=data.get("sckreen"),
+                caption=caption,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=keyboard.as_markup(),
+            )
+
+            await message.answer(
+                "✅ Вы отметили, что <b>выполнили оплату</b>...\n\n"
+                "Я уже передал информацию Агенту Поддержки. Скоро он <b>свяжется с вами и выдаст код</b>"
+                " от сертификата на сумму: {data.get('amount')} руб.\n\n"
+                "💚 Спасибо, что доверяете PHOENIX STUDIO\n",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
+            )
+        else:
+            await message.answer(
+                "🚫 Вы уже подали заявку на выдачу нового сертификата."
+                " До его выдачи вы не можете зарегистрировать новый",
+                reply_markup=app.keyboards.MAIN,
+            )
         await state.clear()
 
 
@@ -131,24 +153,39 @@ async def cmd_create_giftcard_sckreenshot(
 async def cmd_mygiftcards(message: aiogram.types.Message):
     async with app.database.models.async_session():
         user = await app.database.requests.get_user(message.from_user.id)
-        giftcards_user = await app.database.requests.get_giftcards_user(user.id)
-        if giftcards_user:
+        active_giftcards_user = await app.database.requests.get_active_giftcards_user(
+            user.id,
+        )
+        inactive_giftcards_user = (
+            await app.database.requests.get_inactive_giftcards_user(user.id),
+        )
+
+        if active_giftcards_user or inactive_giftcards_user:
             await message.answer(
                 "♻️ Вывожу ваши подарочные карты...",
                 reply_markup=app.keyboards.MAIN,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
-            for i in giftcards_user:
-                name = f"{i.name}" if i.name else "Не активирован"
+            for i in active_giftcards_user:
                 is_active = "Да" if i.is_active else "Нет"
                 await message.answer(
-                    f"<b>{name}</b>\n"
+                    f"<code>{i.name}</code>\n"
+                    f"Сумма: {i.amount} руб.\n"
+                    f"Активирован: {is_active}\n\n"
+                    "Скопируйте код, <b>нажав на его название</b> и отправьте другу!"
+                    " При оплате он сможет им воспользоваться",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
+                )
+            for i in inactive_giftcards_user:
+                is_active = "Да" if i.is_active else "Нет"
+                await message.answer(
+                    f"<b>Ожидает выдачи Агентом Поддержки</b>\n"
                     f"Сумма: {i.amount} руб.\n"
                     f"Активирован: {is_active}",
                     parse_mode=aiogram.enums.ParseMode.HTML,
                 )
         else:
-            await message.answer("🚫 У вас нет подарочных сертификатов")
+            await message.answer("🚫 У вас нет созданных подарочных сертификатов")
 
 
 @router.message(st.CreateTicket.question)
