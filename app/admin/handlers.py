@@ -31,6 +31,27 @@ async def cmd_admin(message: aiogram.types.Message):
 
 @router.message(
     app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Статистика",
+)
+async def cmd_statistic(message: aiogram.types.Message):
+    await message.answer(
+        "🔰 Вывожу статистику...",
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+    statistics = await app.database.admin.requests.get_ratings_statistics()
+    await message.answer(
+        f"Общее количество оценок: {statistics['total_ratings']}\n\n"
+        f"😡: {statistics['scores']['score_bad']}\n"
+        f"😕: {statistics['scores']['score_not_very']}\n"
+        f"🤨: {statistics['scores']['score_not_bad']}\n"
+        f"😀: {statistics['scores']['score_cool']}\n"
+        f"Средняя оценка: {statistics['average_score']:.2f}",
+    )
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
     aiogram.F.text == "Создание гифта(-ов)",
 )
 async def cmd_admin_create_gift(
@@ -111,9 +132,8 @@ async def gift_selected(
         )
         await bot.send_message(
             get_gift_user.tg_id,
-            "✅ <b>Оповещение</b>\n\n"
-            "Агент Технической поддержки подтвердил выдачу подарочного сертификата."
-            "Теперь вы можете посмотреть его в  <b>'Моих сертификатах'</b>",
+            app.messages.NOTIFICATION_MESSAGE + "Агент Технической поддержки подтвердил выдачу подарочного сертификата."
+            " Теперь вы можете посмотреть его в  <b>'Моих сертификатах'</b>",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.GIFT_CARDS,
         )
@@ -153,7 +173,7 @@ async def cmd_get_tickets(
                     f"{i.question}\n"
                     f"{user_profile_link}\n"
                     f"Статус: {i.status.name}\n"
-                    f"Создан: {i.created_on}\n",
+                    f"Создан: {i.created_on.strftime('%H:%M %D')}\n",
                     parse_mode=aiogram.enums.ParseMode.HTML,
                     reply_markup=keyboard.as_markup(),
                 )
@@ -204,28 +224,58 @@ async def ticket_ticket_id(
 async def ticket_edit_status(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
 ):
     data = await state.get_data()
+    translated_status = app.messages.STATUS_TRANSLATIONS.get(message.text.upper(), message.text)
 
     async with app.database.models.async_session() as session:
-        try:
-            await app.database.admin.requests.update_ticket_status(
-                session,
-                data.get("ticket_id"),
-                message.text,
-            )
+        if message.text == "COMPLETED":
+            await app.database.requests.close_ticket_from_user(data.get("user").id)
+
             await message.answer(
-                f"✅ Вы успшено сменили статус тикета №{data.get('ticket_id')} на - {message.text}",
-                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                f"✅ Вы закрыли тикет №{data.get('ticket_id')}. Статус изменен на \"{translated_status}\" ",
             )
-            await state.clear()
-        except sqlalchemy.exc.DBAPIError:
-            await message.answer(
-                "❗️ Выберите статус из перечня",
-                reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+            await bot.send_message(
+                data.get("user").tg_id,
+                app.messages.NOTIFICATION_MESSAGE
+                + f"Ваш <b>тикет №{data.get('ticket_id')}</b> закрыт Агентом Поддержки\n\n",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
             )
-            await state.set_state(app.admin.states.EditOrder.edit_status)
-            return
+            await bot.send_message(
+                data.get("user").tg_id,
+                app.messages.SCORE_SUPPORT_MESSAGE,
+                reply_markup=app.keyboards.SCORE_SUPPORT.as_markup(),
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+        else:
+            try:
+                await app.database.admin.requests.update_ticket_status(
+                    session,
+                    data.get("ticket_id"),
+                    message.text,
+                )
+                await message.answer(
+                    f"✅ Вы успешно сменили статус тикета №{data.get('ticket_id')} на \"{translated_status}\"",
+                    reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                )
+                await bot.send_message(
+                    data.get("user").tg_id,
+                    app.messages.NOTIFICATION_MESSAGE
+                    + f"Статус вашего <b>тикета №{data.get('ticket_id')}</b> изменен Агентом Поддержки на"
+                    f' "{translated_status}"',
+                    parse_mode=aiogram.enums.ParseMode.HTML,
+                )
+            except sqlalchemy.exc.DBAPIError:
+                await message.answer(
+                    "❗️ Выберите статус из перечня",
+                    reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+                )
+                await state.set_state(app.admin.states.EditOrder.edit_status)
+                return
+
+        await state.clear()
 
 
 @router.message(app.admin.states.EditTicket.answer_ticket)
@@ -240,7 +290,7 @@ async def ticket_answer_ticket(
         try:
             await bot.send_message(
                 data.get("user").tg_id,
-                "❗️ <b>Вам пришло новое сообщение от Агента Поддержки</b>\n\n" f"{message.text}",
+                app.messages.NOTIFICATION_ADMIN_MESSAGE + f"Тикет №{data.get('ticket_id')}\n\"{message.text}\"",
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
             await app.database.admin.requests.update_ticket_status(
@@ -249,7 +299,8 @@ async def ticket_answer_ticket(
                 "IN_PROGRESS",
             )
             await message.answer(
-                f"✅ Сообщение отправлено пользователю тикета №{data.get('ticket_id')}",
+                f"✅ Сообщение отправлено пользователю тикета №{data.get('ticket_id')}\n"
+                "Статус автоматически изменен на - в работе",
             )
 
         except AttributeError:
@@ -269,7 +320,7 @@ async def cmd_all_orders(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
 ):
-    orders = await app.database.admin.requests.get_all_orders()
+    orders = await app.database.admin.requests.get_all_open_orders()
     if orders:
         await message.answer(
             "✅ Вывожу список заказов...\n\n",
@@ -287,6 +338,8 @@ async def cmd_all_orders(
 
             item = await app.database.requests.get_item(i.product)
             user = await app.database.admin.requests.get_user_for_id(i.user)
+            await state.update_data(user=user)
+
             user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
             await message.answer(
                 f"<b>Заказ №{i.id}</b>\n\n"
@@ -298,7 +351,7 @@ async def cmd_all_orders(
                 reply_markup=keyboard.as_markup(),
             )
     else:
-        await message.answer("🚫 К сожалению, заказов нет")
+        await message.answer("🚫 К сожалению, активных заказов нет")
 
 
 @router.callback_query(aiogram.F.data.startswith("order_"))
@@ -337,27 +390,59 @@ async def order_order_id(
 async def order_edit_status(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
 ):
     data = await state.get_data()
+    translated_status = app.messages.STATUS_TRANSLATIONS.get(message.text.upper(), message.text)
+
     async with app.database.models.async_session() as session:
-        try:
-            await app.database.admin.requests.update_order_status(
-                session,
-                data.get("order_id"),
-                message.text,
-            )
+        if message.text == "COMPLETED":
+            await app.database.requests.close_order_from_user(data.get("user").id)
+
             await message.answer(
-                f"✅ Вы успшено сменили статус заказа №{data.get('order_id')} на - {message.text}",
-                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                f"✅ Вы завершили заказ №{data.get('order_id')}. Статус изменен на \"{translated_status}\" ",
             )
-            await state.clear()
-        except sqlalchemy.exc.DBAPIError:
-            await message.answer(
-                "❗️ Выберите статус из перечня",
-                reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+            await bot.send_message(
+                data.get("user").tg_id,
+                app.messages.NOTIFICATION_MESSAGE
+                + f"Ваш <b>заказ №{data.get('order_id')}</b> завершен Исполнителем. Благодарим за обращение к нам",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
             )
-            await state.set_state(app.admin.states.EditOrder.edit_status)
-            return
+            await bot.send_message(
+                data.get("user").tg_id,
+                app.messages.SCORE_SUPPORT_MESSAGE,
+                reply_markup=app.keyboards.SCORE_SUPPORT.as_markup(),
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+        else:
+            try:
+                await app.database.admin.requests.update_order_status(
+                    session,
+                    data.get("order_id"),
+                    message.text,
+                )
+                await message.answer(
+                    f"✅ Вы успешно сменили статус заказа №{data.get('order_id')} на \"{translated_status}\"",
+                    reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                )
+                await bot.send_message(
+                    data.get("user").tg_id,
+                    app.messages.NOTIFICATION_MESSAGE
+                    + f"Статус вашего <b>заказа №{data.get('order_id')}</b> изменен Исполнителем на"
+                    f' "{translated_status}"',
+                    parse_mode=aiogram.enums.ParseMode.HTML,
+                )
+
+            except sqlalchemy.exc.DBAPIError:
+                await message.answer(
+                    "❗️ Выберите статус из перечня",
+                    reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+                )
+                await state.set_state(app.admin.states.EditOrder.edit_status)
+                return
+
+        await state.clear()
 
 
 @router.message(
@@ -624,9 +709,9 @@ async def edit_item_itemobject(
         await message.answer(
             "✅ Отправляю выбранный вами на редакцию товар...",
         )
-        await message.answer_photo(object.image)
-        await message.answer(
-            f"<b>{object.title.title()}</b>\n\n"
+        await message.answer_photo(
+            object.image,
+            caption=f"<b>{object.title.title()}</b>\n\n"
             f"{object.description}\n\n"
             f"Цена: {object.price} руб.\n"
             f"Срок выполнения: {object.deadline} дней",
@@ -719,9 +804,9 @@ async def edit_item_editable_object(
         )
 
     if message.text == "5":
-        await message.answer_photo(object.image)
-        await message.answer(
-            "✅ Ваш выбранный элемент - 5) Фотография\n\n" "❗️ Теперь отправьте новую фотографию для товара",
+        await message.answer_photo(
+            object.image,
+            caption="✅ Ваш выбранный элемент - 5) Фотография\n\n" "❗️ Теперь отправьте новую фотографию для товара",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
@@ -879,8 +964,11 @@ async def create_item_deadline(
             f"Цена: {data.get('price')} руб.\n"
             f"Дедлайн: {data.get('deadline')} дней"
         )
-        await message.answer(response_text, parse_mode=aiogram.enums.ParseMode.HTML)
-        await message.answer_photo(data.get("image").file_id)
+        await message.answer_photo(
+            data.get("image").file_id,
+            caption=response_text,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
 
         await state.clear()
     except ValueError as e:

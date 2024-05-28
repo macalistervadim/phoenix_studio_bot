@@ -28,6 +28,23 @@ class Base(sqlalchemy.ext.asyncio.AsyncAttrs, sqlalchemy.orm.DeclarativeBase):
     )
 
 
+class Rating(Base):
+    __tablename__ = "rating"
+
+    score = sqlalchemy.Column(sqlalchemy.Integer, nullable=False)
+
+
+class BlackList(Base):
+    __tablename__ = "blacklist"
+
+    user = sqlalchemy.Column(
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("user.id", ondelete="CASCADE"),
+        index=True,
+    )
+    reason = sqlalchemy.Column(sqlalchemy.String)
+
+
 class User(Base):
     __tablename__ = "user"
 
@@ -76,7 +93,6 @@ class Order(Base):
         sqlalchemy.Integer,
         sqlalchemy.ForeignKey("user.id", ondelete="CASCADE"),
         index=True,
-        unique=True,
     )
     status = sqlalchemy.Column(
         sqlalchemy.dialects.postgresql.ENUM(StatusEnum, name="status_enum"),

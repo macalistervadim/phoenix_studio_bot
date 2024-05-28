@@ -55,3 +55,23 @@ GIFT_CARDS = aiogram.types.ReplyKeyboardMarkup(
     resize_keyboard=True,
     input_field_placeholder="Выберите пункт меню",
 )
+
+SCORE_SUPPORT = aiogram.utils.keyboard.InlineKeyboardBuilder()
+SCORE_SUPPORT.add(
+    aiogram.types.InlineKeyboardButton(
+        text="😡",
+        callback_data="score_1",
+    ),
+    aiogram.types.InlineKeyboardButton(
+        text="😕",
+        callback_data="score_2",
+    ),
+    aiogram.types.InlineKeyboardButton(
+        text="🤨",
+        callback_data="score_3",
+    ),
+    aiogram.types.InlineKeyboardButton(
+        text="😀",
+        callback_data="score_4",
+    ),
+)

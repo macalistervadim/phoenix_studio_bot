@@ -15,6 +15,52 @@ async def get_editable_item(title):
         return result
 
 
+async def get_ratings_statistics():
+    async with app.database.models.async_session() as session:
+        total_ratings = await session.scalar(sqlalchemy.select(sqlalchemy.func.count(app.database.models.Rating.id)))
+        score_values = {"score_bad": 1, "score_not_very": 2, "score_not_bad": 3, "score_cool": 4}
+
+        scores = {
+            "score_bad": await session.scalar(
+                sqlalchemy.select(sqlalchemy.func.count()).where(
+                    app.database.models.Rating.score == score_values["score_bad"],
+                ),
+            ),
+            "score_not_very": await session.scalar(
+                sqlalchemy.select(sqlalchemy.func.count()).where(
+                    app.database.models.Rating.score == score_values["score_not_very"],
+                ),
+            ),
+            "score_not_bad": await session.scalar(
+                sqlalchemy.select(sqlalchemy.func.count()).where(
+                    app.database.models.Rating.score == score_values["score_not_bad"],
+                ),
+            ),
+            "score_cool": await session.scalar(
+                sqlalchemy.select(sqlalchemy.func.count()).where(
+                    app.database.models.Rating.score == score_values["score_cool"],
+                ),
+            ),
+        }
+
+        if total_ratings > 0:
+            weighted_sum = (
+                scores["score_bad"] * score_values["score_bad"]
+                + scores["score_not_very"] * score_values["score_not_very"]
+                + scores["score_not_bad"] * score_values["score_not_bad"]
+                + scores["score_cool"] * score_values["score_cool"]
+            )
+            average_score = weighted_sum / total_ratings
+        else:
+            average_score = 0
+
+        return {
+            "total_ratings": total_ratings,
+            "scores": scores,
+            "average_score": average_score,
+        }
+
+
 async def get_all_pcodes():
     async with app.database.models.async_session() as session:
         result = await session.execute(
@@ -180,9 +226,18 @@ async def add_admin_giftcard(session: sqlalchemy.ext.asyncio.AsyncSession, data)
         return None
 
 
-async def get_all_orders():
+async def get_all_open_orders():
     async with app.database.models.async_session() as session:
-        result = await session.execute(sqlalchemy.select(app.database.models.Order))
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Order).where(
+                (
+                    sqlalchemy.or_(
+                        app.database.models.Order.status == "CREATED",
+                        app.database.models.Order.status == "IN_PROGRESS",
+                    )
+                ),
+            ),
+        )
         return result.scalars().all()
 
 

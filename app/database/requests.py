@@ -93,7 +93,11 @@ async def get_ticket(user_id):
 async def get_order(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(
-            sqlalchemy.select(app.database.models.Order).filter_by(user=user_id),
+            sqlalchemy.select(app.database.models.Order)
+            .filter_by(user=user_id)
+            .filter(
+                app.database.models.Order.status == "CREATED" and app.database.models.Order.status == "IN_PROGRESS",
+            ),
         )
         return result.scalars().first()
 
@@ -117,21 +121,24 @@ async def add_order(session: sqlalchemy.ext.asyncio.AsyncSession, data):
         return False
 
 
-async def delete_order(session: sqlalchemy.ext.asyncio.AsyncSession, user):
+async def close_order_from_user(user_id):
     try:
-        await session.execute(
-            sqlalchemy.delete(app.database.models.Order).where(
-                app.database.models.Order.user == user,
-            ),
-        )
-        await session.execute(
-            sqlalchemy.update(app.database.models.User)
-            .where(app.database.models.User.id == user)
-            .values(waiting_order=False),
-        )
-        await session.commit()
+        async with app.database.models.async_session() as session:
+            await session.execute(
+                sqlalchemy.update(app.database.models.User)
+                .where(app.database.models.User.id == user_id)
+                .values(waiting_order=False),
+            )
+            await session.execute(
+                sqlalchemy.update(app.database.models.Order)
+                .where(app.database.models.Order.user == user_id)
+                .values(status="COMPLETED"),
+            )
+            await session.commit()
+
     except sqlalchemy.exc.IntegrityError:
         await session.rollback()
+        return False
 
 
 async def add_item(session: sqlalchemy.ext.asyncio.AsyncSession, data):
@@ -144,6 +151,17 @@ async def add_item(session: sqlalchemy.ext.asyncio.AsyncSession, data):
             deadline=int(data.get("deadline")),
         )
         session.add(item)
+        await session.commit()
+    except sqlalchemy.exc.IntegrityError:
+        pass
+
+
+async def add_score(session: sqlalchemy.ext.asyncio.AsyncSession, score):
+    try:
+        score = app.database.models.Rating(
+            score=int(score),
+        )
+        session.add(score)
         await session.commit()
     except sqlalchemy.exc.IntegrityError:
         pass

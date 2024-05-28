@@ -85,7 +85,8 @@ async def cmd_create_giftcard_amount(
         await state.set_state(st.CreateGiftCard.sckreenshot)
     else:
         await message.answer(
-            "❗️ Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+            app.messages.ERORR_MESSAGE + "Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
         await state.set_state(st.CreateGiftCard.amount)
         return
@@ -142,9 +143,10 @@ async def cmd_create_giftcard_screenshot(
             )
         else:
             await message.answer(
-                "🚫 Вы уже подали заявку на выдачу нового сертификата."
+                app.messages.ERORR_MESSAGE + "Вы уже подали заявку на выдачу нового сертификата."
                 " До его выдачи вы не можете зарегистрировать новый",
                 reply_markup=app.keyboards.MAIN,
+                parse_mode=aiogram.enums.ParseMode.HTML,
             )
         await state.clear()
 
@@ -185,7 +187,10 @@ async def cmd_mygiftcards(message: aiogram.types.Message):
                     parse_mode=aiogram.enums.ParseMode.HTML,
                 )
         else:
-            await message.answer("🚫 У вас нет созданных подарочных сертификатов")
+            await message.answer(
+                app.messages.ERORR_MESSAGE + "У вас нет созданных подарочных сертификатов",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
 
 
 @router.message(st.CreateTicket.question)
@@ -228,8 +233,9 @@ async def cmd_create_ticket_question(
 
         else:
             await message.answer(
-                "❗️ Упс... Кажется у вас уже есть созданный тикет\n",
+                app.messages.ERORR_MESSAGE + "Кажется, у вас уже есть созданный тикет\n",
                 reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
+                parse_mode=aiogram.enums.ParseMode.HTML,
             )
 
     await state.clear()
@@ -269,9 +275,9 @@ async def cmd_catalog(message: aiogram.types.Message):
                 ),
             )
 
-            await message.answer_photo(i.image)
-            await message.answer(
-                f"<b>{i.title.title()}</b>\n\n"
+            await message.answer_photo(
+                i.image,
+                caption=f"<b>{i.title.title()}</b>\n\n"
                 f"{i.description}\n\n"
                 f"Цена за услугу: {i.price} руб.\n"
                 f"Срок выполнения: {i.deadline} дней",
@@ -281,7 +287,7 @@ async def cmd_catalog(message: aiogram.types.Message):
 
     else:
         await message.answer(
-            "♻️ К сожалению, каталог пуст",
+            app.messages.ERORR_MESSAGE + "К сожалению, каталог пуст",
             parse_mode=aiogram.enums.ParseMode.HTML,
         )
 
@@ -328,19 +334,19 @@ async def order_create_description(
                 )
             else:
                 await message.answer(
-                    f"❗️ К сожалению, промокода {message.text.lower()} - не существует. "
+                    app.messages.ERORR_MESSAGE + f"К сожалению, промокода {message.text.lower()} - не существует. "
                     "Повторите попытку или введите 0",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                 )
                 await state.set_state(st.CreateOrder.pcode)
                 return
 
-        await app.database.requests.update_user(
-            session,
-            tg_id=message.from_user.id,
-        )
-
         data = await state.get_data()
         if await app.database.requests.add_order(session, data):
+            await app.database.requests.update_user(
+                session,
+                tg_id=message.from_user.id,
+            )
             await message.answer(
                 app.messages.SUCC_CREATE_ORDER_MESSAGE,
                 parse_mode=aiogram.enums.ParseMode.HTML,
@@ -356,39 +362,63 @@ async def order_create_description(
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
         else:
-            await message.answer("😱 Похоже, у вас уже есть действительный заказ...")
+            await message.answer(
+                app.messages.ERORR_MESSAGE + "Похоже, у вас уже есть действительный заказ",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
 
         await state.clear()
 
 
 @router.message(aiogram.F.text == "Отменить заказ")
 async def cmd_cancel_order(message: aiogram.types.Message):
-    async with app.database.models.async_session() as session:
+    async with app.database.models.async_session():
         user = await app.database.requests.get_user(message.from_user.id)
         if await app.database.requests.get_order(user.id):
-            await app.database.requests.delete_order(session, user.id)
+            await app.database.requests.close_order_from_user(user.id)
 
             await message.answer(
-                "♻️ Ваш заказ успешно отменен",
+                "♻️ Ваш заказ <b>успешно отменен</b>",
                 reply_markup=app.keyboards.MAIN,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
         else:
-            await message.answer("❗️ У вас нет активных заказов")
+            await message.answer(
+                app.messages.ERORR_MESSAGE + "У вас нет активных заказов",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
 
 
 @router.message(aiogram.F.text == "Закрыть тикет")
 async def cmd_close_ticket(message: aiogram.types.Message):
-
     async with app.database.models.async_session():
         user = await app.database.requests.get_user(message.from_user.id)
-        await app.database.requests.close_ticket_from_user(user.id)
+        if await app.database.requests.get_tickets_user(user.id):
+            await app.database.requests.close_ticket_from_user(user.id)
 
-    await message.answer(
-        "♻️ Ваш тикет <b>успешно закрыт</b>",
-        reply_markup=app.keyboards.MAIN,
-        parse_mode=aiogram.enums.ParseMode.HTML,
-    )
+            await message.answer(
+                "♻️ Ваш тикет <b>успешно закрыт</b>",
+                reply_markup=app.keyboards.MAIN,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+        else:
+            await message.answer(
+                app.messages.ERORR_MESSAGE + "У вас нет активных тикетов",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+
+
+@router.callback_query(aiogram.F.data.startswith("score_"))
+async def score_selected(
+    callback: aiogram.types.CallbackQuery,
+):
+    score = callback.data.replace("score_", "")
+
+    async with app.database.models.async_session() as session:
+        await app.database.requests.add_score(session, score)
+
+    await callback.message.delete()
+    await callback.message.answer("⭐️ Благодарим за обратную связь!")
 
 
 @router.message(aiogram.F.text == "✅ Подписался")
