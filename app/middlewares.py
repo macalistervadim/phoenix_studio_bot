@@ -5,6 +5,8 @@ import typing
 
 import aiogram
 
+import app.database.admin
+import app.database.admin.requests
 import app.database.requests
 import app.keyboards
 import app.messages
@@ -107,6 +109,7 @@ class CheckWaitingOrder(aiogram.BaseMiddleware):
             user = await app.database.requests.get_user(
                 tg_id=data["event_from_user"].id,
             )
+            blacklist = await app.database.admin.requests.get_user_for_blacklist(user.id)
 
             if (
                 data["event_update"].message.text != "Отменить заказ"
@@ -118,6 +121,8 @@ class CheckWaitingOrder(aiogram.BaseMiddleware):
                     parse_mode=aiogram.enums.ParseMode.HTML,
                     reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
                 )
+            elif blacklist:
+                await event.answer(app.messages.BLACKLIST_MESSAGE, parse_mode=aiogram.enums.ParseMode.HTML)
             else:
                 return await handler(event, data)
 

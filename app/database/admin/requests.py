@@ -69,10 +69,26 @@ async def get_all_pcodes():
         return result.scalars().all()
 
 
+async def get_all_blacklist():
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.BlackList),
+        )
+        return result.scalars().all()
+
+
 async def get_user_for_id(id):
     async with app.database.models.async_session() as session:
         result = await session.execute(
             sqlalchemy.select(app.database.models.User).filter_by(id=int(id)),
+        )
+        return result.scalars().first()
+
+
+async def get_user_for_blacklist(user_id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.BlackList).filter_by(user=int(user_id)),
         )
         return result.scalars().first()
 
@@ -91,6 +107,16 @@ async def add_pcode(session: sqlalchemy.ext.asyncio.AsyncSession, data):
         pass
 
 
+async def add_user_blacklist(data):
+    async with app.database.models.async_session() as session:
+        try:
+            add_blacklist = app.database.models.BlackList(user=int(data.get("user").id), reason=data.get("reason"))
+            session.add(add_blacklist)
+            await session.commit()
+        except sqlalchemy.exc.IntegrityError:
+            pass
+
+
 async def delete_pcode(session: sqlalchemy.ext.asyncio.AsyncSession, name):
     try:
         await session.execute(
@@ -101,6 +127,20 @@ async def delete_pcode(session: sqlalchemy.ext.asyncio.AsyncSession, name):
         await session.commit()
     except sqlalchemy.exc.IntegrityError:
         pass
+
+
+async def delete_user_blacklist(user_id):
+    async with app.database.models.async_session() as session:
+        try:
+            await session.execute(
+                sqlalchemy.delete(app.database.models.BlackList).where(
+                    app.database.models.BlackList.user == user_id,
+                ),
+            )
+            await session.commit()
+            return True
+        except sqlalchemy.exc.IntegrityError:
+            pass
 
 
 async def delete_item(session: sqlalchemy.ext.asyncio.AsyncSession, title):

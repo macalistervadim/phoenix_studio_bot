@@ -47,3 +47,12 @@ class EditTicket(aiogram.fsm.state.StatesGroup):
 class AdminCreateGiftCard(aiogram.fsm.state.StatesGroup):
     count = aiogram.fsm.state.State()
     amount = aiogram.fsm.state.State()
+
+
+class AddBlackList(aiogram.fsm.state.StatesGroup):
+    contact = aiogram.fsm.state.State()
+    reason = aiogram.fsm.state.State()
+
+
+class DelBlackList(aiogram.fsm.state.StatesGroup):
+    contact = aiogram.fsm.state.State()

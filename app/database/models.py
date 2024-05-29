@@ -41,6 +41,7 @@ class BlackList(Base):
         sqlalchemy.Integer,
         sqlalchemy.ForeignKey("user.id", ondelete="CASCADE"),
         index=True,
+        unique=True,
     )
     reason = sqlalchemy.Column(sqlalchemy.String)
 

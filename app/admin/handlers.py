@@ -16,6 +16,8 @@ import app.messages
 
 router = aiogram.Router()
 
+MAX_MESSAGE_LENGTH = 4096
+
 
 @router.message(
     app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
@@ -27,6 +29,150 @@ async def cmd_admin(message: aiogram.types.Message):
         reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Черный список",
+)
+async def cmd_blacklist(message: aiogram.types.Message):
+    blacklist = await app.database.admin.requests.get_all_blacklist()
+
+    if blacklist:
+        await message.answer(
+            "🔰 Вывожу черный список...",
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        lines = []
+        for i in blacklist:
+            user = await app.database.admin.requests.get_user_for_id(i.user)
+            user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
+            lines.append(
+                f"<b>Блокировка №{i.id}</b>\n"
+                f"{user_profile_link}\n"
+                f"Причина: {i.reason}\n"
+                f"Дата блокировки: {i.created_on.strftime('%H:%M %D')}\n",
+            )
+
+        result_string = "\n".join(lines)
+
+        # Разбиваем на части, если сообщение слишком длинное
+        for i in range(0, len(result_string), MAX_MESSAGE_LENGTH):
+            await message.answer(
+                result_string[i : i + MAX_MESSAGE_LENGTH],  # noqa: E203
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+    else:
+        await message.answer(
+            app.messages.ERORR_MESSAGE + "Блокировки отсутствуют",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Вынести из ЧС",
+)
+async def cmd_del_user_blacklist(message: aiogram.types.Message, state: aiogram.fsm.context.FSMContext):
+    await message.answer(
+        "❗️ Пожалуйста, перешлите контакт пользователя, которого необходимо вынести из ЧС",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
+
+    await state.set_state(app.admin.states.DelBlackList.contact)
+
+
+@router.message(lambda message: message.contact, app.admin.states.DelBlackList.contact)
+async def cmd_del_user_blacklist_contact(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    await state.update_data(contact=message.contact)
+    user = await app.database.requests.get_user(int(message.contact.user_id))
+    if await app.database.admin.requests.delete_user_blacklist(user.id):
+        await message.answer(
+            app.messages.SUCCESS_MESSAGE + "Пользователь вынесен из Черного списка",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        await bot.send_message(
+            user.tg_id,
+            app.messages.NOTIFICATION_MESSAGE
+            + "Агент Поддержки вынес вас из Черного списка. Пожалуйста, впредь не нарушайте правила PHOENIX STUDIO",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+    else:
+        await message.answer(
+            app.messages.ERORR_MESSAGE + "Пользователя нет в Черном списке",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Занести в ЧС",
+)
+async def cmd_add_user_blacklist(message: aiogram.types.Message, state: aiogram.fsm.context.FSMContext):
+    await message.answer(
+        "❗️ Пожалуйста, перешлите контакт пользователя, которого необходимо занести в ЧС",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
+
+    await state.set_state(app.admin.states.AddBlackList.contact)
+
+
+@router.message(lambda message: message.contact, app.admin.states.AddBlackList.contact)
+async def cmd_add_user_blacklist_contact(message: aiogram.types.Message, state: aiogram.fsm.context.FSMContext):
+    await state.update_data(contact=message.contact)
+
+    user = await app.database.requests.get_user(int(message.contact.user_id))
+    if user:
+        await state.update_data(user=user)
+
+        await message.answer("❗️ Укажите причину блокировки")
+
+        await state.set_state(app.admin.states.AddBlackList.reason)
+    else:
+        await state.clear()
+        await message.answer(
+            app.messages.ERORR_MESSAGE + "Данный пользователь не является нашим клиентом",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+
+@router.message(app.admin.states.AddBlackList.reason)
+async def cmd_add_user_blacklist_reason(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    await state.update_data(reason=message.text.lower())
+    data = await state.get_data()
+
+    if await app.database.admin.requests.get_user_for_blacklist(data.get("user").id) is None:
+        await app.database.admin.requests.add_user_blacklist(data)
+
+        await message.answer(
+            app.messages.SUCCESS_MESSAGE + "Пользователь занесен в Черный список",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+        await bot.send_message(
+            data.get("user").tg_id,
+            app.messages.NOTIFICATION_MESSAGE
+            + f"Вы были занесены в Черный список Агентом Поддержки. <b>Причина блокировки: {data.get('reason')}</b>\n\n"
+            "К сожалению, дальнейшее взаимодействие с ботом недоступно.\n"
+            f"Если вы считаете это ошибкой, пожалуйста, свяжитесь с Администратором - https://t.me/macalistervadim",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+    else:
+        await message.answer(
+            app.messages.ERORR_MESSAGE + "Данный пользователь уже в Черном списке",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+    await state.clear()
 
 
 @router.message(
