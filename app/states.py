@@ -12,3 +12,7 @@ class CreateTicket(aiogram.fsm.state.StatesGroup):
 class CreateGiftCard(aiogram.fsm.state.StatesGroup):
     amount = aiogram.fsm.state.State()
     sckreenshot = aiogram.fsm.state.State()
+
+
+class AnswerTicket(aiogram.fsm.state.StatesGroup):
+    message = aiogram.fsm.state.State()

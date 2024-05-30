@@ -10,6 +10,7 @@ import app.database.admin.requests
 import app.database.requests
 import app.keyboards
 import app.messages
+import app.states
 
 
 class ChechSubUser(aiogram.BaseMiddleware):
@@ -92,7 +93,7 @@ class CancelCommand(aiogram.BaseMiddleware):
 
 class CheckWaitingOrder(aiogram.BaseMiddleware):
     """
-    Проверка нахождения пользователя в состоянии ожидания заказа/саппорта
+    Проверка нахождения пользователя в состоянии ожидания
     """
 
     async def __call__(
@@ -110,11 +111,14 @@ class CheckWaitingOrder(aiogram.BaseMiddleware):
                 tg_id=data["event_from_user"].id,
             )
             blacklist = await app.database.admin.requests.get_user_for_blacklist(user.id)
+            state: aiogram.fsm.context.FSMContext = data.get("state")
+            current_state = await state.get_state()
 
             if (
                 data["event_update"].message.text != "Отменить заказ"
                 and data["event_update"].message.text != "Закрыть тикет"
                 and (user.waiting_support or user.waiting_order)
+                and current_state != app.states.AnswerTicket.message.state
             ):
                 await event.answer(
                     app.messages.WAITING_ORDER_OR_SUPPORT_MESSAGE,

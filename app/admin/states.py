@@ -56,3 +56,11 @@ class AddBlackList(aiogram.fsm.state.StatesGroup):
 
 class DelBlackList(aiogram.fsm.state.StatesGroup):
     contact = aiogram.fsm.state.State()
+
+
+class SendPayment(aiogram.fsm.state.StatesGroup):
+    contact = aiogram.fsm.state.State()
+
+
+class Mailing(aiogram.fsm.state.StatesGroup):
+    message = aiogram.fsm.state.State()

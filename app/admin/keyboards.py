@@ -28,6 +28,10 @@ ADMIN_COMMANDS = aiogram.types.ReplyKeyboardMarkup(
             aiogram.types.KeyboardButton(text="Занести в ЧС"),
             aiogram.types.KeyboardButton(text="Вынести из ЧС"),
         ],
+        [
+            aiogram.types.KeyboardButton(text="Отправить реквизиты"),
+            aiogram.types.KeyboardButton(text="Сделать рассылку"),
+        ],
     ],
     row_width=3,
     resize_keyboard=True,

@@ -2,6 +2,8 @@ import os
 
 import aiogram
 
+import app.admin
+import app.admin.keyboards
 import app.database.models
 import app.database.requests
 import app.keyboards
@@ -419,6 +421,57 @@ async def score_selected(
 
     await callback.message.delete()
     await callback.message.answer("⭐️ Благодарим за обратную связь!")
+
+
+@router.callback_query(aiogram.F.data.startswith("answer_ticket_"))
+async def ticket_answer(
+    callback: aiogram.types.CallbackQuery,
+    state: aiogram.fsm.context.FSMContext,
+):
+    ticket_id = callback.data.replace("answer_ticket_", "")
+    await state.update_data(ticket_id=ticket_id, keyboard_message_id=callback.message.message_id)
+
+    await callback.message.answer(
+        f"Введите сообщение для Агента Поддержки <b>(по тикету №{ticket_id})</b>."
+        " Также при необходимости <b>прикрепите документ/фотографию</b> или иные средства, "
+        "которые помогут в решение вашей проблемы",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
+
+    await state.set_state(app.states.AnswerTicket.message)
+
+
+@router.message(app.states.AnswerTicket.message)
+async def ticket_answer_message(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    data = await state.get_data()
+
+    admin_id = int(os.getenv("ADMIN_ID", "no_admin"))
+
+    await message.answer(
+        app.messages.SUCCESS_MESSAGE + "Сообщение отправлено Агенту Поддержки. Ожидайте обратной связи",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=aiogram.types.ReplyKeyboardRemove(),
+    )
+    keyboard_message_id = data.get("keyboard_message_id")
+    await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=keyboard_message_id, reply_markup=None)
+    await bot.send_message(
+        admin_id,
+        app.messages.NOTIFICATION_MESSAGE
+        + f"Пришло новое сообщение от пользователя по тикету №{data.get('ticket_id')}",
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+    await bot.forward_message(admin_id, message.chat.id, message.message_id)
+
+    async with app.database.models.async_session():
+        pass
+
+    await state.clear()
 
 
 @router.message(aiogram.F.text == "✅ Подписался")

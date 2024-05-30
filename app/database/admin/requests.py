@@ -77,6 +77,14 @@ async def get_all_blacklist():
         return result.scalars().all()
 
 
+async def get_all_users():
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.User),
+        )
+        return result.scalars().all()
+
+
 async def get_user_for_id(id):
     async with app.database.models.async_session() as session:
         result = await session.execute(

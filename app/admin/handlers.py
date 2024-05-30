@@ -1,3 +1,4 @@
+import asyncio
 import os
 import uuid
 
@@ -171,6 +172,103 @@ async def cmd_add_user_blacklist_reason(
             app.messages.ERORR_MESSAGE + "Данный пользователь уже в Черном списке",
             parse_mode=aiogram.enums.ParseMode.HTML,
         )
+
+    await state.clear()
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Сделать рассылку",
+)
+async def cmd_mailing(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await message.answer(
+        "❗️ Отправьте сообщение с документом/фотографией или прочим для рассылки",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+
+    await state.set_state(app.admin.states.Mailing.message)
+
+
+@router.message(app.admin.states.Mailing.message)
+async def cmd_mailing_message(message: aiogram.types.Message, state: aiogram.fsm.context.FSMContext, bot: aiogram.Bot):
+    users = await app.database.admin.requests.get_all_users()
+
+    content = None
+    content_type = None
+
+    if message.photo:
+        content = message.photo[-1].file_id
+        content_type = "photo"
+    elif message.document:
+        content = message.document.file_id
+        content_type = "document"
+    else:
+        content = message.text
+        content_type = "text"
+
+    successful = 0
+    failed = 0
+
+    for user in users:
+        try:
+            if content_type == "photo":
+                await bot.send_photo(user.tg_id, content, caption=message.caption)
+            elif content_type == "document":
+                await bot.send_document(user.tg_id, content, caption=message.caption)
+            else:
+                await bot.send_message(user.tg_id, content, parse_mode=aiogram.enums.ParseMode.HTML)
+            successful += 1
+        except aiogram.exceptions.TelegramAPIError:
+            failed += 1
+
+        await asyncio.sleep(0.1)  # Пауза между отправками
+
+    await message.answer(
+        f"Рассылка завершена.\nУспешно: {successful}\nНе удалось: {failed}",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+    )
+
+    await state.clear()
+
+
+@router.message(
+    app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
+    aiogram.F.text == "Отправить реквизиты",
+)
+async def cmd_send_payment(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+):
+    await message.answer(
+        "❗️ Перешлите контакт, которому необходимо переслать реквизиты",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
+
+    await state.set_state(app.admin.states.SendPayment.contact)
+
+
+@router.message(app.admin.states.SendPayment.contact)
+async def cmd_send_payment_contact(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    user = message.contact.user_id
+    await bot.send_message(
+        user,
+        app.messages.PAYMENT,
+    )
+    await message.answer(
+        app.messages.SUCCESS_MESSAGE + "Реквизиты отправлены пользователю",
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
 
     await state.clear()
 
@@ -434,10 +532,19 @@ async def ticket_answer_ticket(
 
     async with app.database.models.async_session() as session:
         try:
+            answer_ticket = aiogram.utils.keyboard.InlineKeyboardBuilder()
+            answer_ticket.add(
+                aiogram.types.InlineKeyboardButton(
+                    text="Ответить Агенту поддержки",
+                    callback_data=f"answer_ticket_{data.get('ticket_id')}",
+                ),
+            )
+
             await bot.send_message(
                 data.get("user").tg_id,
                 app.messages.NOTIFICATION_ADMIN_MESSAGE + f"Тикет №{data.get('ticket_id')}\n\"{message.text}\"",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=answer_ticket.as_markup(),
             )
             await app.database.admin.requests.update_ticket_status(
                 session,
