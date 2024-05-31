@@ -85,7 +85,11 @@ class CancelCommand(aiogram.BaseMiddleware):
 
         if data["event_update"].message.text == "Отменить":
             await data["state"].clear()
-            await event.answer("💤 Выполнение команды отменено")
+            await event.answer(
+                app.messages.SUCCESS_MESSAGE + "Процесс прерван",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
+            )
             return
 
         return await handler(event, data)
@@ -146,7 +150,7 @@ class CheckTime(aiogram.BaseMiddleware):
         data: typing.Dict[str, typing.Any],
     ) -> typing.Any:
 
-        start_time = datetime.time(10, 0)
+        start_time = datetime.time(0, 0)
         end_time = datetime.time(23, 0)
 
         formatted_start_time = start_time.strftime("%H:%M")
@@ -155,7 +159,7 @@ class CheckTime(aiogram.BaseMiddleware):
         if start_time <= datetime.datetime.now().time() <= end_time:
             return await handler(event, data)
         return event.answer(
-            "Упс!\n\n"
-            "🙈 К сожалению, время работы нашего бота вышло.\n"
+            "Упс!\n"
+            "🙈 К сожалению, время работы нашего бота вышло.\n\n"
             f"Время работы бота: с {formatted_start_time} до {formatted_end_time} часов",
         )

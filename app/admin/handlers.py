@@ -20,13 +20,18 @@ router = aiogram.Router()
 MAX_MESSAGE_LENGTH = 4096
 
 
+async def get_profile_link(tg_id):
+    user_profile_link = f'<a href="tg://user?id={tg_id}">Профиль пользователя</a>'
+    return user_profile_link
+
+
 @router.message(
     app.admin.filters.IsAdmin(os.getenv("ADMIN_ID", "null_admins")),
     aiogram.F.text == "/admin",
 )
 async def cmd_admin(message: aiogram.types.Message):
     await message.answer(
-        "🔰 Открываю админку...",
+        app.messages.SUCCESS_MESSAGE + "Открываю админку",
         reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -41,14 +46,14 @@ async def cmd_blacklist(message: aiogram.types.Message):
 
     if blacklist:
         await message.answer(
-            "🔰 Вывожу черный список...",
+            app.messages.SUCCESS_MESSAGE + "Вывожу черный список",
             reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             parse_mode=aiogram.enums.ParseMode.HTML,
         )
         lines = []
         for i in blacklist:
             user = await app.database.admin.requests.get_user_for_id(i.user)
-            user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
+            user_profile_link = await get_profile_link(user.tg_id)
             lines.append(
                 f"<b>Блокировка №{i.id}</b>\n"
                 f"{user_profile_link}\n"
@@ -68,6 +73,7 @@ async def cmd_blacklist(message: aiogram.types.Message):
         await message.answer(
             app.messages.ERORR_MESSAGE + "Блокировки отсутствуют",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
 
@@ -77,8 +83,10 @@ async def cmd_blacklist(message: aiogram.types.Message):
 )
 async def cmd_del_user_blacklist(message: aiogram.types.Message, state: aiogram.fsm.context.FSMContext):
     await message.answer(
-        "❗️ Пожалуйста, перешлите контакт пользователя, которого необходимо вынести из ЧС",
+        app.messages.INFORMATION_MESSAGE
+        + "Пожалуйста, перешлите контакт пользователя, которого необходимо вынести из ЧС",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
     )
 
     await state.set_state(app.admin.states.DelBlackList.contact)
@@ -96,17 +104,20 @@ async def cmd_del_user_blacklist_contact(
         await message.answer(
             app.messages.SUCCESS_MESSAGE + "Пользователь вынесен из Черного списка",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
         await bot.send_message(
             user.tg_id,
             app.messages.NOTIFICATION_MESSAGE
-            + "Агент Поддержки вынес вас из Черного списка. Пожалуйста, впредь не нарушайте правила PHOENIX STUDIO",
+            + "Агент Поддержки вынес вас из Черного списка.\nПожалуйста, впредь не нарушайте правила PHOENIX STUDIO",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.MAIN,
         )
     else:
         await message.answer(
             app.messages.ERORR_MESSAGE + "Пользователя нет в Черном списке",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
 
@@ -116,8 +127,10 @@ async def cmd_del_user_blacklist_contact(
 )
 async def cmd_add_user_blacklist(message: aiogram.types.Message, state: aiogram.fsm.context.FSMContext):
     await message.answer(
-        "❗️ Пожалуйста, перешлите контакт пользователя, которого необходимо занести в ЧС",
+        app.messages.INFORMATION_MESSAGE
+        + "Пожалуйста, перешлите контакт пользователя, которого необходимо занести в ЧС",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
     )
 
     await state.set_state(app.admin.states.AddBlackList.contact)
@@ -131,7 +144,11 @@ async def cmd_add_user_blacklist_contact(message: aiogram.types.Message, state: 
     if user:
         await state.update_data(user=user)
 
-        await message.answer("❗️ Укажите причину блокировки")
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE + "Укажите причину блокировки",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+        )
 
         await state.set_state(app.admin.states.AddBlackList.reason)
     else:
@@ -139,6 +156,7 @@ async def cmd_add_user_blacklist_contact(message: aiogram.types.Message, state: 
         await message.answer(
             app.messages.ERORR_MESSAGE + "Данный пользователь не является нашим клиентом",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
 
@@ -157,6 +175,7 @@ async def cmd_add_user_blacklist_reason(
         await message.answer(
             app.messages.SUCCESS_MESSAGE + "Пользователь занесен в Черный список",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
         await bot.send_message(
@@ -171,6 +190,7 @@ async def cmd_add_user_blacklist_reason(
         await message.answer(
             app.messages.ERORR_MESSAGE + "Данный пользователь уже в Черном списке",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
     await state.clear()
@@ -185,7 +205,7 @@ async def cmd_mailing(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Отправьте сообщение с документом/фотографией или прочим для рассылки",
+        app.messages.INFORMATION_MESSAGE + "Отправьте сообщение с документом/фотографией или прочим для рассылки",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -228,7 +248,7 @@ async def cmd_mailing_message(message: aiogram.types.Message, state: aiogram.fsm
         await asyncio.sleep(0.1)  # Пауза между отправками
 
     await message.answer(
-        f"Рассылка завершена.\nУспешно: {successful}\nНе удалось: {failed}",
+        app.messages.SUCCESS_MESSAGE + f"Рассылка завершена.\nУспешно: {successful}\nНе удалось: {failed}",
         parse_mode=aiogram.enums.ParseMode.HTML,
         reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
     )
@@ -245,7 +265,7 @@ async def cmd_send_payment(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Перешлите контакт, которому необходимо переслать реквизиты",
+        app.messages.INFORMATION_MESSAGE + "Перешлите контакт, которому необходимо переслать реквизиты",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -263,6 +283,7 @@ async def cmd_send_payment_contact(
     await bot.send_message(
         user,
         app.messages.PAYMENT,
+        parse_mode=aiogram.enums.ParseMode.HTML,
     )
     await message.answer(
         app.messages.SUCCESS_MESSAGE + "Реквизиты отправлены пользователю",
@@ -285,7 +306,7 @@ async def cmd_statistic(message: aiogram.types.Message):
     )
     statistics = await app.database.admin.requests.get_ratings_statistics()
     await message.answer(
-        f"Общее количество оценок: {statistics['total_ratings']}\n\n"
+        f"Общее количество оценок: {statistics['total_ratings']}\n"
         f"😡: {statistics['scores']['score_bad']}\n"
         f"😕: {statistics['scores']['score_not_very']}\n"
         f"🤨: {statistics['scores']['score_not_bad']}\n"
@@ -302,7 +323,11 @@ async def cmd_admin_create_gift(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
 ):
-    await message.answer("❗️ Введите количество создаваемых гифтов")
+    await message.answer(
+        app.messages.INFORMATION_MESSAGE + "Введите количество создаваемых гифтов",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
 
     await state.set_state(app.admin.states.AdminCreateGiftCard.count)
 
@@ -314,7 +339,11 @@ async def cmd_admin_create_gift_count(
 ):
     await state.update_data(count=message.text)
 
-    await message.answer("❗️ Теперь укажите сумму подарочных сертификатов")
+    await message.answer(
+        app.messages.INFORMATION_MESSAGE + "Теперь укажите сумму подарочных сертификатов",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
 
     await state.set_state(app.admin.states.AdminCreateGiftCard.amount)
 
@@ -339,13 +368,16 @@ async def cmd_admin_create_gift_amount(
                 )
 
                 await message.answer(
-                    f"✅ Вы успешно создали подарочный сертификат №{gift.id}",
+                    app.messages.SUCCESS_MESSAGE + f"Вы успешно создали подарочный сертификат №{gift.id}",
                     reply_markup=app.keyboards.GIFT_CARDS,
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                 )
         await state.clear()
     else:
         await message.answer(
-            "❗️ Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+            app.messages.ERORR_MESSAGE + "Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
         await state.set_state(app.admin.states.AdminCreateGiftCard.amount)
         return
@@ -367,7 +399,9 @@ async def gift_selected(
         )
         await callback.message.delete()
         await callback.message.answer(
-            f"✅ Вы подтвердили выдачу подарочного сертификата №{gift}",
+            app.messages.SUCCESS_MESSAGE + f"Вы подтвердили выдачу подарочного сертификата №{gift}",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
         gift_user = await app.database.requests.get_gift(int(gift))
@@ -395,8 +429,8 @@ async def cmd_get_tickets(
         tickets = await app.database.admin.requests.get_all_open_tickets()
         if tickets:
             await message.answer(
-                "✅ Вывожу список активных тикетов...\n\n",
-                reply_markup=app.keyboards.CANCEL_OR_BACK,
+                app.messages.INFORMATION_MESSAGE + "Вывожу список активных тикетов\n\n",
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
             for i in tickets:
@@ -410,7 +444,7 @@ async def cmd_get_tickets(
 
                 user = await app.database.admin.requests.get_user_for_id(i.user)
                 await state.update_data(user=user)
-                user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
+                user_profile_link = await get_profile_link(user.tg_id)
 
                 await message.answer(
                     f"<b>Тикет №{i.id}</b>\n\n"
@@ -422,7 +456,11 @@ async def cmd_get_tickets(
                     reply_markup=keyboard.as_markup(),
                 )
         else:
-            await message.answer("🚫 К сожалению, активных тикетов нет")
+            await message.answer(
+                app.messages.ERORR_MESSAGE + "К сожалению, активных тикетов нет",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+            )
 
 
 @router.callback_query(aiogram.F.data.startswith("ticket_"))
@@ -434,11 +472,13 @@ async def ticket_selected(
     await state.update_data(ticket_id=ticket)
 
     await callback.message.answer(
-        "♻️ Начинаем процесс редактирования тикета...\n"
+        app.messages.INFORMATION_MESSAGE + "Начинаем процесс редактирования тикета\n"
         f"Ваш выбранный тикет - №{ticket}\n\n"
         "Выберите, что хотите отредактировать кнопками клавиатуры\n",
         reply_markup=app.admin.keyboards.CHOICE_EDIT_TICKET,
+        parse_mode=aiogram.enums.ParseMode.HTML,
     )
+
     await state.set_state(app.admin.states.EditTicket.ticket_id)
 
 
@@ -451,16 +491,20 @@ async def ticket_ticket_id(
 
     if message.text == "Сменить статус":
         await message.answer(
-            "❗️ Выберите на какой статус сменить",
+            app.messages.INFORMATION_MESSAGE + "Выберите на какой статус сменить",
             reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
+
         await state.set_state(app.admin.states.EditTicket.edit_status)
 
     elif message.text == "Ответить":
         await message.answer(
-            "❗️ Введите ответ пользователю:",
+            app.messages.INFORMATION_MESSAGE + "Введите ответ пользователю:",
             reply_markup=app.keyboards.CANCEL_OR_BACK,
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
+
         await state.set_state(app.admin.states.EditTicket.answer_ticket)
 
 
@@ -478,8 +522,12 @@ async def ticket_edit_status(
             await app.database.requests.close_ticket_from_user(data.get("user").id)
 
             await message.answer(
-                f"✅ Вы закрыли тикет №{data.get('ticket_id')}. Статус изменен на \"{translated_status}\" ",
+                app.messages.SUCCESS_MESSAGE
+                + f"Вы закрыли тикет №{data.get('ticket_id')}. Статус изменен на \"{translated_status}\" ",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )
+
             await bot.send_message(
                 data.get("user").tg_id,
                 app.messages.NOTIFICATION_MESSAGE
@@ -501,7 +549,9 @@ async def ticket_edit_status(
                     message.text,
                 )
                 await message.answer(
-                    f"✅ Вы успешно сменили статус тикета №{data.get('ticket_id')} на \"{translated_status}\"",
+                    app.messages.SUCCESS_MESSAGE
+                    + f"Вы успешно сменили статус тикета №{data.get('ticket_id')} на \"{translated_status}\"",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                     reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
                 )
                 await bot.send_message(
@@ -510,12 +560,15 @@ async def ticket_edit_status(
                     + f"Статус вашего <b>тикета №{data.get('ticket_id')}</b> изменен Агентом Поддержки на"
                     f' "{translated_status}"',
                     parse_mode=aiogram.enums.ParseMode.HTML,
+                    reply_markup=app.keyboards.MAIN,
                 )
             except sqlalchemy.exc.DBAPIError:
                 await message.answer(
-                    "❗️ Выберите статус из перечня",
+                    app.messages.ERORR_MESSAGE + "Выберите статус из перечня",
                     reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                 )
+
                 await state.set_state(app.admin.states.EditOrder.edit_status)
                 return
 
@@ -552,14 +605,18 @@ async def ticket_answer_ticket(
                 "IN_PROGRESS",
             )
             await message.answer(
-                f"✅ Сообщение отправлено пользователю тикета №{data.get('ticket_id')}\n"
+                app.messages.SUCCESS_MESSAGE + f"Сообщение отправлено пользователю тикета №{data.get('ticket_id')}\n"
                 "Статус автоматически изменен на - в работе",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )
 
         except AttributeError:
             await message.answer(
-                f"🚫 Сообщение не отправлено пользователю тикета №{data.get('ticket_id')}\n"
+                app.messages.ERORR_MESSAGE + f"Сообщение не отправлено пользователю тикета №{data.get('ticket_id')}\n"
                 "Попробуйте повторно запросить список активных тикетов и повторите попытку дать ответ",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )
 
     await state.clear()
@@ -574,9 +631,10 @@ async def cmd_all_orders(
     state: aiogram.fsm.context.FSMContext,
 ):
     orders = await app.database.admin.requests.get_all_open_orders()
+
     if orders:
         await message.answer(
-            "✅ Вывожу список заказов...\n\n",
+            app.messages.INFORMATION_MESSAGE + "Вывожу список заказов\n\n",
             reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             parse_mode=aiogram.enums.ParseMode.HTML,
         )
@@ -593,7 +651,7 @@ async def cmd_all_orders(
             user = await app.database.admin.requests.get_user_for_id(i.user)
             await state.update_data(user=user)
 
-            user_profile_link = f'<a href="tg://user?id={user.tg_id}">Профиль пользователя</a>'
+            user_profile_link = await get_profile_link(user.tg_id)
             await message.answer(
                 f"<b>Заказ №{i.id}</b>\n\n"
                 f"{item.title.title()}\n"
@@ -604,7 +662,11 @@ async def cmd_all_orders(
                 reply_markup=keyboard.as_markup(),
             )
     else:
-        await message.answer("🚫 К сожалению, активных заказов нет")
+        await message.answer(
+            app.messages.ERORR_MESSAGE + "К сожалению, активных заказов нет",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        )
 
 
 @router.callback_query(aiogram.F.data.startswith("order_"))
@@ -616,11 +678,13 @@ async def order_selected(
     await state.update_data(order_id=order)
 
     await callback.message.answer(
-        "♻️ Начинаем процесс редактирования заказа...\n"
+        app.messages.INFORMATION_MESSAGE + "Начинаем процесс редактирования заказа...\n"
         f"Ваш выбранный заказ - №{order}\n\n"
         "Выберите, что хотите отредактировать кнопками клавиатуры\n",
         reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER,
+        parse_mode=aiogram.enums.ParseMode.HTML,
     )
+
     await state.set_state(app.admin.states.EditOrder.order_id)
 
 
@@ -633,9 +697,11 @@ async def order_order_id(
 
     if message.text == "Сменить статус":
         await message.answer(
-            "❗️ Выберите на какой статус сменить",
+            app.messages.INFORMATION_MESSAGE + "Выберите на какой статус сменить",
             reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
+
         await state.set_state(app.admin.states.EditOrder.edit_status)
 
 
@@ -653,7 +719,10 @@ async def order_edit_status(
             await app.database.requests.close_order_from_user(data.get("user").id)
 
             await message.answer(
-                f"✅ Вы завершили заказ №{data.get('order_id')}. Статус изменен на \"{translated_status}\" ",
+                app.messages.SUCCESS_MESSAGE
+                + f"Вы завершили заказ №{data.get('order_id')}. Статус изменен на \"{translated_status}\" ",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )
             await bot.send_message(
                 data.get("user").tg_id,
@@ -676,8 +745,10 @@ async def order_edit_status(
                     message.text,
                 )
                 await message.answer(
-                    f"✅ Вы успешно сменили статус заказа №{data.get('order_id')} на \"{translated_status}\"",
+                    app.messages.SUCCESS_MESSAGE
+                    + f"Вы успешно сменили статус заказа №{data.get('order_id')} на \"{translated_status}\"",
                     reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                 )
                 await bot.send_message(
                     data.get("user").tg_id,
@@ -689,9 +760,11 @@ async def order_edit_status(
 
             except sqlalchemy.exc.DBAPIError:
                 await message.answer(
-                    "❗️ Выберите статус из перечня",
+                    app.messages.ERORR_MESSAGE + "Выберите статус из перечня",
                     reply_markup=app.admin.keyboards.CHOICE_EDIT_ORDER_STATUS,
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                 )
+
                 await state.set_state(app.admin.states.EditOrder.edit_status)
                 return
 
@@ -711,20 +784,24 @@ async def cmd_all_pcodes(
 
         if pcodes:
             await message.answer(
-                "✅ Вывожу список промокодов...\n\n",
+                app.messages.INFORMATION_MESSAGE + "Вывожу список промокодов\n\n",
                 reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
             for i in await app.database.admin.requests.get_all_pcodes():
                 await message.answer(
-                    f"<b>{i.name}</b>\n" f"Скидка: {i.discount}%\n" f"Кол-во активаций: {i.activations}\n",
+                    f"<code>{i.name}</code>\n" f"Скидка: {i.discount}%\n" f"Кол-во активаций: {i.activations}\n",
                     parse_mode=aiogram.enums.ParseMode.HTML,
                     reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
                 )
 
             await state.set_state(app.admin.states.DeletePocde.name)
         else:
-            await message.answer("🚫 К сожалению, промокодов нет")
+            await message.answer(
+                app.messages.ERORR_MESSAGE + "К сожалению, промокодов нет",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+            )
 
 
 @router.message(
@@ -736,7 +813,7 @@ async def cmd_delete_pcode(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс удаления промокода...\n\n" "Укажите название промокода, который хотите удалить:",
+        app.messages.INFORMATION_MESSAGE + "Укажите название промокода, который хотите удалить",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -756,17 +833,19 @@ async def delete_pcode_name(
 
     if pcode:
         await message.answer(
-            "❗️ Вы уверены, что выбрали верный промокод?\n\n"
-            f"{pcode.name.title()}\n"
+            app.messages.INFORMATION_MESSAGE + "Вы уверены, что выбрали верный промокод?\n\n"
+            f"<b>{pcode.name.title()}</b>\n"
             f"Скидка: {pcode.discount}%\n"
             f"Активаций: {pcode.activations}",
             reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
 
     elif pcode is None:
         await message.answer(
-            app.messages.FAILED_MESSAGE,
+            app.messages.ERORR_MESSAGE + "Такого промокода не существует",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
     await state.set_state(app.admin.states.DeletePocde.choice)
@@ -786,11 +865,17 @@ async def delete_pcode_choice(
                 data.get("pcode").name,
             )
         await message.answer(
-            f"✅ Промокод - {data.get('name')} успешно удален из базы данных",
+            app.messages.SUCCESS_MESSAGE + f"Промокод - {data.get('name')} успешно удален из базы данных",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
     elif message.text == "Неверно":
-        await message.answer("✅ Понял... Отменяем процесс удаления промокода")
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE + "Отменяем процесс удаления промокода",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        )
 
     await state.clear()
 
@@ -804,7 +889,7 @@ async def cmd_create_pcode(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс создания нового промокода...\n\n" "Укажите название промокода:",
+        app.messages.INFORMATION_MESSAGE + "Укажите название нового промокода",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -820,7 +905,10 @@ async def create_pcode_name(
     await state.update_data(name=message.text.lower())
 
     await message.answer(
-        "❗️ Теперь необходимо указать процент скидки (укажите просто цифру, например: 25):",
+        app.messages.INFORMATION_MESSAGE
+        + "Теперь необходимо указать процент скидки (укажите просто цифру, например: 25)",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
     )
 
     await state.set_state(app.admin.states.CreatePcode.discount)
@@ -833,7 +921,11 @@ async def create_pcode_discount(
 ):
     await state.update_data(discount=message.text.lower())
 
-    await message.answer("❗️ Укажите число активаций (просто цифру):")
+    await message.answer(
+        app.messages.INFORMATION_MESSAGE + "Укажите число активаций (просто цифру)",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
 
     await state.set_state(app.admin.states.CreatePcode.activations)
 
@@ -852,9 +944,11 @@ async def create_pcode_activations(
         await app.database.admin.requests.add_pcode(session, data)
 
     await message.answer(
-        f"✅ Вы успешно создали промокод: {data.get('name')}\n"
+        app.messages.SUCCESS_MESSAGE + f"Вы создали промокод: <code>{data.get('name')}</code>\n"
         f"Число активаций: {data.get('activations')}\n"
         f"Скидка: {data.get('discount')}%",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
     )
 
     await state.clear()
@@ -869,7 +963,7 @@ async def cmd_delete_item(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс удаления товара/услуги...\n\n" "Укажите название товара, который хотите удалить:",
+        app.messages.INFORMATION_MESSAGE + "Укажите название товара, который хотите удалить",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -889,18 +983,20 @@ async def delete_item_item(
 
     if object:
         await message.answer(
-            "❗️ Вы уверены, что выбрали верный товар/услугу?\n\n"
-            f"{object.title.title()}\n"
+            app.messages.INFORMATION_MESSAGE + "Вы уверены, что выбрали верный товар/услугу?\n\n"
+            f"<b>{object.title.title()}</b>\n"
             f"{object.description}\n\n"
             f"Цена: {object.price} руб.\n"
             f"Сроки выполнения: {object.deadline} дней",
             reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
 
     elif object is None:
         await message.answer(
-            app.messages.FAILED_MESSAGE,
+            app.messages.ERORR_MESSAGE + "Такого товара/услуги не существует",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
     await state.set_state(app.admin.states.DeleteItem.choice)
@@ -920,11 +1016,17 @@ async def delete_item_choice(
                 data.get("object_db").title,
             )
         await message.answer(
-            f"✅ Товар/услуга - {data.get('item')} успешно удален из базы данных",
+            app.messages.SUCCESS_MESSAGE + f"Товар/услуга '{data.get('item')}' удален из базы данных",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
     elif message.text == "Неверно":
-        await message.answer("✅ Понял... Отменяем процесс удаления товара/услуги")
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE + "Отменяем процесс удаления товара/услуги",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        )
 
     await state.clear()
 
@@ -938,8 +1040,7 @@ async def cmd_edit_item(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс редактирования товара/услуги...\n\n"
-        "Введите название товара/услуги, которую бы вы хотели отредактировать "
+        app.messages.INFORMATION_MESSAGE + "Введите название товара/услуги, которую бы вы хотели отредактировать "
         "(ВНИМАНИЕ: Вводите точное название товара, иначе в боте возникнет ошибка):",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
@@ -960,7 +1061,8 @@ async def edit_item_itemobject(
 
     if object:
         await message.answer(
-            "✅ Отправляю выбранный вами на редакцию товар...",
+            app.messages.INFORMATION_MESSAGE + "Отправляю выбранный вами на редакцию товар/услугу",
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
         await message.answer_photo(
             object.image,
@@ -971,7 +1073,8 @@ async def edit_item_itemobject(
             parse_mode=aiogram.enums.ParseMode.HTML,
         )
         await message.answer(
-            "❗️ Пожалуйста, убедитесь что вы выбрали <b>нужный товар</b> и нажмите соответствующую кнопку...",
+            app.messages.INFORMATION_MESSAGE
+            + "Пожалуйста, убедитесь что вы выбрали <b>нужный товар/услугу</b> и нажмите соответствующую кнопку",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.admin.keyboards.CHOICE_EDIT_ITEM,
         )
@@ -980,8 +1083,9 @@ async def edit_item_itemobject(
 
     elif object is None:
         await message.answer(
-            app.messages.FAILED_MESSAGE,
+            app.messages.ERORR_MESSAGE + "Такого товара/услуги не существует",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
         await state.clear()
@@ -994,20 +1098,24 @@ async def edit_item_choice(
 ):
     if message.text == "Верно":
         await message.answer(
-            "Отлично, тогда продолжаем редактирование. Что будем редактировать?\n"
+            app.messages.INFORMATION_MESSAGE + "Отлично, тогда продолжаем редактирование. Что будем редактировать?\n"
             "<b>1) Название</b>\n"
             "<b>2) Описание</b>\n"
             "<b>3) Цена</b>\n"
             "<b>4) Сроки выполнения</b>\n"
             "<b>5) Фотографию</b>\n\n"
-            "❗️ Вам необходимо прислать мне <b>ЦИФРУ</b> обозначающую значение, которое вы хотите отредактировать",
+            "Вам необходимо прислать мне <b>ЦИФРУ</b> обозначающую значение, которое вы хотите отредактировать",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
 
         await state.set_state(app.admin.states.EditItem.editable_object)
     else:
-        await message.answer("👋 Понял, в таком случае отменяю редактирование...")
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE + "Отменяем процесс редактирования товара/услуги",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
+        )
 
         await state.clear()
 
@@ -1023,35 +1131,36 @@ async def edit_item_editable_object(
 
     if message.text == "1":
         await message.answer(
-            f"✅ Ваш выбранный элемент - 1) Название\n"
+            app.messages.INFORMATION_MESSAGE + f"Ваш выбранный элемент - 1) Название\n"
             f"Название: {object.title}\n\n"
-            "❗️ Теперь введите новое название для товара/услуги (регистр не имеет значение)",
+            "Теперь введите новое название для товара/услуги (регистр не имеет значение)",
             reply_markup=app.keyboards.CANCEL_OR_BACK,
+            parse_mode=aiogram.enums.ParseMode.HTML,
         )
 
     if message.text == "2":
         await message.answer(
-            f"✅ Ваш выбранный элемент - 2) Описание\n"
+            app.messages.INFORMATION_MESSAGE + f"Ваш выбранный элемент - 2) Описание\n"
             f"Описание: {object.description}\n\n"
-            "❗️ Теперь введите новое описание для товара/услуги <b>(регистр не имеет значение)</b>",
+            "Теперь введите новое описание для товара/услуги <b>(регистр не имеет значение)</b>",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
 
     if message.text == "3":
         await message.answer(
-            f"✅ Ваш выбранный элемент - 3) Цена\n"
+            app.messages.INFORMATION_MESSAGE + f"Ваш выбранный элемент - 3) Цена\n"
             f"Цена: {object.price} руб.\n\n"
-            "❗️ Теперь введите новую цену для товара/услуги <b>(в рублях)</b>",
+            "Теперь введите новую цену для товара/услуги <b>(в рублях)</b>",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
 
     if message.text == "4":
         await message.answer(
-            f"✅ Ваш выбранный элемент - 4) Сроки выполнения\n"
+            app.messages.INFORMATION_MESSAGE + f"Ваш выбранный элемент - 4) Сроки выполнения\n"
             f"Сроки выполнения: {object.deadline} дней\n\n"
-            "❗️ Теперь введите новые сроки выполнения для товара/услуги <b>(кол-во дней)</b>",
+            "Теперь введите новые сроки выполнения для товара/услуги <b>(кол-во дней)</b>",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
@@ -1059,7 +1168,8 @@ async def edit_item_editable_object(
     if message.text == "5":
         await message.answer_photo(
             object.image,
-            caption="✅ Ваш выбранный элемент - 5) Фотография\n\n" "❗️ Теперь отправьте новую фотографию для товара",
+            caption=app.messages.INFORMATION_MESSAGE + "Ваш выбранный элемент - 5) Фотография\n\n"
+            "Теперь отправьте новую фотографию для товара",
             parse_mode=aiogram.enums.ParseMode.HTML,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
         )
@@ -1120,9 +1230,11 @@ async def edit_item_edit_item(
             edit_object = "Фотография"
 
     await message.answer(
-        f"✅ Вы успешно отредактировали товар - {data.get('object')}\n\n"
+        app.messages.SUCCESS_MESSAGE + f"Вы успешно отредактировали товар - {data.get('object')}\n\n"
         f"Редактируемый объект - {data.get('editable_object')}) {edit_object}\n"
         f"Отредактировали на - {edit_item if isinstance(edit_item, str) else ''}\n",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
     )
 
     if isinstance(edit_item, aiogram.types.PhotoSize):
@@ -1140,7 +1252,7 @@ async def cmd_create_item(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Начинаем процесс создания нового товара/услуги...\n" "Введите название нового товара:",
+        app.messages.INFORMATION_MESSAGE + "Введите название нового товара",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -1156,7 +1268,9 @@ async def create_item_title(
     await state.update_data(title=message.text.lower())
 
     await message.answer(
-        "❗️ Теперь необходимо ввести описание товара/услуги (макс. 250 символов)",
+        app.messages.INFORMATION_MESSAGE + "Теперь необходимо ввести описание товара/услуги (макс. 250 символов)",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
     )
 
     await state.set_state(app.admin.states.CreateItem.description)
@@ -1169,7 +1283,11 @@ async def create_item_description(
 ):
     await state.update_data(description=message.text.lower())
 
-    await message.answer("❗️ Прикрепите одно изображение к товару/услуге")
+    await message.answer(
+        app.messages.INFORMATION_MESSAGE + "Прикрепите одно изображение к товару/услуге",
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
+    )
 
     await state.set_state(app.admin.states.CreateItem.image)
 
@@ -1181,7 +1299,11 @@ async def create_item_image(
 ):
     await state.update_data(image=message.photo[-2])
 
-    await message.answer("❗️ Укажите цену за товар/услугу (в руб.)")
+    await message.answer(
+        app.messages.INFORMATION_MESSAGE + "Укажите цену за товар/услугу (в руб.)",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
 
     await state.set_state(app.admin.states.CreateItem.price)
 
@@ -1193,7 +1315,11 @@ async def create_item_price(
 ):
     await state.update_data(price=message.text.lower())
 
-    await message.answer("❗️ Укажите примерное время выполнения в днях")
+    await message.answer(
+        app.messages.INFORMATION_MESSAGE + "Укажите примерное время выполнения в днях",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.CANCEL_OR_BACK,
+    )
 
     await state.set_state(app.admin.states.CreateItem.deadline)
 
@@ -1211,7 +1337,7 @@ async def create_item_deadline(
             await app.database.requests.add_item(session, data)
 
         response_text = (
-            f"✅ <b>Отлично, товар создан:</b>\n\n"
+            f"<b>Отлично, товар создан:</b>\n\n"
             f"Название: {data.get('title')}\n\n"
             f"Описание: {data.get('description')}\n\n"
             f"Цена: {data.get('price')} руб.\n"
@@ -1219,15 +1345,16 @@ async def create_item_deadline(
         )
         await message.answer_photo(
             data.get("image").file_id,
-            caption=response_text,
+            caption=app.messages.INFORMATION_MESSAGE + response_text,
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )
 
         await state.clear()
-    except ValueError as e:
+    except ValueError:
         await message.answer(
-            "🚫 Упс... кажется вы допустили ошибку при создании товара/услуги\n"
-            f"Код ошибки: {e.args[0]}\n\n"
+            app.messages.ERORR_MESSAGE + "Кажется, вы допустили ошибку при создании товара/услуги\n"
             "Вы можете попробовать создать товар/услугу заново",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
         )

@@ -3,6 +3,7 @@ import os
 import aiogram
 
 import app.admin
+import app.admin.handlers
 import app.admin.keyboards
 import app.database.models
 import app.database.requests
@@ -30,7 +31,7 @@ async def cmd_create_ticket(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "❗️ Пожалуйста, опишите вашу проблему/вопрос (кратко)",
+        app.messages.INFORMATION_MESSAGE + "Пожалуйста, опишите вашу проблему/вопрос (кратко)",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -55,8 +56,9 @@ async def cmd_create_giftcard(
     state: aiogram.fsm.context.FSMContext,
 ):
     await message.answer(
-        "♻️ Для создания подарочного сертификата, пожалуйста, укажите сумму будущего сертификата (500-25000 руб.)\n"
-        "Не указывайте любые другие символы, кроме цифр - иначе бот выдаст ошибку",
+        app.messages.INFORMATION_MESSAGE
+        + "Для создания подарочного сертификата, пожалуйста, укажите сумму будущего сертификата (500-25000 руб.)\n"
+        "Не указывайте никакие другие символы, кроме цифр - иначе бот выдаст ошибку",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -69,27 +71,41 @@ async def cmd_create_giftcard_amount(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
 ):
-    if 500 <= int(message.text) <= 25000:
-        await state.update_data(amount=message.text.lower())
+    try:
+        if 500 <= int(message.text) <= 25000:
+            await state.update_data(amount=message.text.lower())
+            await message.answer(
+                app.messages.INFORMATION_MESSAGE
+                + f"Теперь необходимо оплатить сумму сертификата: {message.text} руб. Пересылаю вам реквизиты...\n\n"
+                "После оплаты вам необходимо прикрепить соответствующий скриншот с платежом - после чего, я переведу"
+                " вас на Агента поддержки, который выдаст вам код от сертификата",
+                reply_markup=app.keyboards.CANCEL_OR_BACK,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+            await message.answer(
+                app.messages.PAYMENT,
+                reply_markup=app.keyboards.CANCEL_OR_BACK,
+                parse_mode=aiogram.enums.ParseMode.HTML,
+            )
+
+            await state.set_state(st.CreateGiftCard.sckreenshot)
+        else:
+            await message.answer(
+                app.messages.ERORR_MESSAGE
+                + "Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
+                parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.CANCEL_OR_BACK,
+            )
+
+            await state.set_state(st.CreateGiftCard.amount)
+            return
+    except ValueError:
         await message.answer(
-            f"♻️ Теперь необходимо оплатить сумму сертификата: {message.text} руб. Пересылаю вам реквизиты...\n\n"
-            "После оплаты вам необходимо прикрепить соответствующий скриншот с платежом - после чего, я переведу"
-            " вас на Агента поддержки, который выдаст вам код от сертификата",
-            reply_markup=app.keyboards.CANCEL_OR_BACK,
+            app.messages.ERORR_MESSAGE + "Введите число",
             parse_mode=aiogram.enums.ParseMode.HTML,
-        )
-        await message.answer(
-            app.messages.PAYMENT,
             reply_markup=app.keyboards.CANCEL_OR_BACK,
-            parse_mode=aiogram.enums.ParseMode.HTML,
         )
 
-        await state.set_state(st.CreateGiftCard.sckreenshot)
-    else:
-        await message.answer(
-            app.messages.ERORR_MESSAGE + "Сумма подарочного сертификата должна быть в диапазоне от 500 до 25000 руб.",
-            parse_mode=aiogram.enums.ParseMode.HTML,
-        )
         await state.set_state(st.CreateGiftCard.amount)
         return
 
@@ -120,23 +136,23 @@ async def cmd_create_giftcard_screenshot(
                 ),
             )
 
-            user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+            user_profile_link = await app.admin.handlers.get_profile_link(message.from_user.id)
             admin_id = os.getenv("ADMIN_ID", "no_admin")
             caption = (
-                f"❗️ Подтвердите выдачу подарочного сертификат на сумму {data.get('amount')} руб."
+                f"Подтвердите выдачу подарочного сертификат на сумму {data.get('amount')} руб."
                 f" и выдайте пользователю: {user_profile_link}\n"
             )
 
             await bot.send_photo(
                 chat_id=admin_id,
                 photo=data.get("sckreen"),
-                caption=caption,
+                caption=app.messages.NOTIFICATION_MESSAGE + caption,
                 parse_mode=aiogram.enums.ParseMode.HTML,
                 reply_markup=keyboard.as_markup(),
             )
 
             await message.answer(
-                "✅ Вы отметили, что <b>выполнили оплату</b>...\n\n"
+                app.messages.INFORMATION_MESSAGE + "Вы отметили, что <b>выполнили оплату</b>...\n\n"
                 "Я уже передал информацию Агенту Поддержки. Скоро он <b>свяжется с вами и выдаст код</b>"
                 f" от сертификата на сумму: {data.get('amount')} руб.\n\n"
                 "💚 Спасибо, что доверяете PHOENIX STUDIO\n",
@@ -150,6 +166,7 @@ async def cmd_create_giftcard_screenshot(
                 reply_markup=app.keyboards.MAIN,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
+
         await state.clear()
 
 
@@ -166,7 +183,7 @@ async def cmd_mygiftcards(message: aiogram.types.Message):
 
         if active_giftcards_user or inactive_giftcards_user:
             await message.answer(
-                "♻️ Вывожу ваши подарочные карты...",
+                app.messages.INFORMATION_MESSAGE + "Вывожу ваши подарочные сертификаты",
                 reply_markup=app.keyboards.MAIN,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
@@ -179,6 +196,7 @@ async def cmd_mygiftcards(message: aiogram.types.Message):
                     "Скопируйте код, <b>нажав на его название</b> и отправьте другу!"
                     " При оплате он сможет им воспользоваться",
                     parse_mode=aiogram.enums.ParseMode.HTML,
+                    reply_markup=app.keyboards.MAIN,
                 )
             for i in inactive_giftcards_user:
                 is_active = "Да" if i.is_active else "Нет"
@@ -187,11 +205,13 @@ async def cmd_mygiftcards(message: aiogram.types.Message):
                     f"Сумма: {i.amount} руб.\n"
                     f"Активирован: {is_active}",
                     parse_mode=aiogram.enums.ParseMode.HTML,
+                    reply_markup=app.keyboards.MAIN,
                 )
         else:
             await message.answer(
                 app.messages.ERORR_MESSAGE + "У вас нет созданных подарочных сертификатов",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
             )
 
 
@@ -219,20 +239,22 @@ async def cmd_create_ticket_question(
             ticket_id = await app.database.requests.get_ticket(user.id)
 
             await message.answer(
-                f"♻️ <b>Тикет №{ticket_id.id}</b> успешно создан...\n"
+                app.messages.SUCCESS_MESSAGE + f"<b>Тикет №{ticket_id.id}</b> успешно создан...\n"
                 "Пожалуйста, ожидайте ответа от Агента Технической поддержки\n\n"
                 "Если вы ошиблись - <b>закройте свой тикет кнопкой ниже</b>",
                 parse_mode=aiogram.enums.ParseMode.HTML,
                 reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
             )
 
-            user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+            user_profile_link = await app.admin.handlers.get_profile_link(message.from_user.id)
             await bot.send_message(
                 os.getenv("ADMIN_ID", "no_admin"),
-                f"❗️ Пришел новый <b>тикет №{ticket_id.id}</b>\n" f"{user_profile_link}\n" f"Сообщение: {message.text}",
+                app.messages.NOTIFICATION_MESSAGE + f"Пришел новый <b>тикет №{ticket_id.id}</b>\n"
+                f"{user_profile_link}\n"
+                f"Сообщение: {message.text}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )
-
         else:
             await message.answer(
                 app.messages.ERORR_MESSAGE + "Кажется, у вас уже есть созданный тикет\n",
@@ -255,7 +277,7 @@ async def cmd_contacts(message: aiogram.types.Message):
 @router.message(aiogram.F.text == "💚 Вывести команды")
 async def cmd_keyboard(message: aiogram.types.Message):
     await message.answer(
-        "Секунду... Уже вывожу вам свои команды 💚",
+        app.messages.INFORMATION_MESSAGE + "Секунду... Уже вывожу вам свои команды в клавиатуре",
         reply_markup=app.keyboards.MAIN,
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
@@ -266,7 +288,11 @@ async def cmd_catalog(message: aiogram.types.Message):
     request = await app.database.requests.get_catalog()
 
     if request:
-        await message.answer("♻️ Секунду, уже достаю каталог и пересылаю вам...")
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE + "Секунду, уже достаю каталог и пересылаю вам",
+            reply_markup=app.keyboards.MAIN,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
         for i in request:
 
             keyboard = aiogram.utils.keyboard.InlineKeyboardBuilder()
@@ -291,6 +317,7 @@ async def cmd_catalog(message: aiogram.types.Message):
         await message.answer(
             app.messages.ERORR_MESSAGE + "К сожалению, каталог пуст",
             parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.MAIN,
         )
 
 
@@ -303,10 +330,11 @@ async def product_selected(
     await state.update_data(item_id=product)
 
     await callback.message.answer(
-        "♻️ Начинаем процесс оформления заказа...\n"
+        app.messages.INFORMATION_MESSAGE + "Начинаем процесс оформления заказа...\n"
         f"Ваш выбранный товар - №{product}\n\n"
         "Пожалуйста, укажите промокод, если он у вас есть: (если нет - напишите 0)",
         reply_markup=app.keyboards.CANCEL_OR_BACK,
+        parse_mode=aiogram.enums.ParseMode.HTML,
     )
 
     await state.set_state(st.CreateOrder.pcode)
@@ -332,12 +360,14 @@ async def order_create_description(
             if pcode:
                 await app.database.requests.update_pcode(name=message.text.lower())
                 await message.answer(
-                    f"✅ Вы успешно активировали промокод {message.text.lower()} - {pcode.discount}% скидки",
+                    app.messages.SUCCESS_MESSAGE
+                    + f"Вы успешно активировали промокод {message.text.lower()} - {pcode.discount}% скидки",
+                    parse_mode=aiogram.enums.ParseMode.HTML,
                 )
             else:
                 await message.answer(
                     app.messages.ERORR_MESSAGE + f"К сожалению, промокода {message.text.lower()} - не существует. "
-                    "Повторите попытку или введите 0",
+                    "Повторите попытку или введите 0 (если у вас отсутствует промокод)",
                     parse_mode=aiogram.enums.ParseMode.HTML,
                 )
                 await state.set_state(st.CreateOrder.pcode)
@@ -350,23 +380,27 @@ async def order_create_description(
                 tg_id=message.from_user.id,
             )
             await message.answer(
-                app.messages.SUCC_CREATE_ORDER_MESSAGE,
+                app.messages.SUCCESS_MESSAGE + app.messages.SUCC_CREATE_ORDER_MESSAGE,
                 parse_mode=aiogram.enums.ParseMode.HTML,
                 reply_markup=app.keyboards.CANCEL_ORDER_OR_CLOSE_TICKET,
             )
 
-            user_profile_link = f'<a href="tg://user?id={message.from_user.id}">Профиль пользователя</a>'
+            user_profile_link = await app.admin.handlers.get_profile_link(message.from_user.id)
             discount_info = f"ПРОМОКОД: {data.get('pcode')} - {pcode.discount}% скидки" if pcode else ""
             item = await app.database.requests.get_item(data.get("item_id"))
             await bot.send_message(
                 os.getenv("ADMIN_ID", "admin_id"),
-                f"❗️ Пришел новый заказ\n\n{user_profile_link}\n" f"Товар: {item.title.title()}\n" f"{discount_info}",
+                app.messages.NOTIFICATION_MESSAGE + f"Пришел новый заказ\n\n{user_profile_link}\n"
+                f"Товар: {item.title.title()}\n"
+                f"{discount_info}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )
         else:
             await message.answer(
                 app.messages.ERORR_MESSAGE + "Похоже, у вас уже есть действительный заказ",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
             )
 
         await state.clear()
@@ -380,14 +414,15 @@ async def cmd_cancel_order(message: aiogram.types.Message):
             await app.database.requests.close_order_from_user(user.id)
 
             await message.answer(
-                "♻️ Ваш заказ <b>успешно отменен</b>",
+                app.messages.SUCCESS_MESSAGE + "Ваш заказ <b>отменен</b>",
                 reply_markup=app.keyboards.MAIN,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
         else:
             await message.answer(
-                app.messages.ERORR_MESSAGE + "У вас нет активных заказов",
+                app.messages.ERORR_MESSAGE + "У вас нет <b>активных заказов</b>",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
             )
 
 
@@ -399,7 +434,7 @@ async def cmd_close_ticket(message: aiogram.types.Message):
             await app.database.requests.close_ticket_from_user(user.id)
 
             await message.answer(
-                "♻️ Ваш тикет <b>успешно закрыт</b>",
+                app.messages.SUCCESS_MESSAGE + "Ваш тикет <b>закрыт</b>",
                 reply_markup=app.keyboards.MAIN,
                 parse_mode=aiogram.enums.ParseMode.HTML,
             )
@@ -407,6 +442,7 @@ async def cmd_close_ticket(message: aiogram.types.Message):
             await message.answer(
                 app.messages.ERORR_MESSAGE + "У вас нет активных тикетов",
                 parse_mode=aiogram.enums.ParseMode.HTML,
+                reply_markup=app.keyboards.MAIN,
             )
 
 
@@ -420,7 +456,11 @@ async def score_selected(
         await app.database.requests.add_score(session, score)
 
     await callback.message.delete()
-    await callback.message.answer("⭐️ Благодарим за обратную связь!")
+    await callback.message.answer(
+        "⭐️ Благодарим за обратную связь",
+        parse_mode=aiogram.enums.ParseMode.HTML,
+        reply_markup=app.keyboards.MAIN,
+    )
 
 
 @router.callback_query(aiogram.F.data.startswith("answer_ticket_"))
@@ -432,7 +472,7 @@ async def ticket_answer(
     await state.update_data(ticket_id=ticket_id, keyboard_message_id=callback.message.message_id)
 
     await callback.message.answer(
-        f"Введите сообщение для Агента Поддержки <b>(по тикету №{ticket_id})</b>."
+        app.messages.INFORMATION_MESSAGE + f"Введите сообщение для Агента Поддержки <b>(по тикету №{ticket_id})</b>."
         " Также при необходимости <b>прикрепите документ/фотографию</b> или иные средства, "
         "которые помогут в решение вашей проблемы",
         parse_mode=aiogram.enums.ParseMode.HTML,
@@ -457,6 +497,7 @@ async def ticket_answer_message(
         parse_mode=aiogram.enums.ParseMode.HTML,
         reply_markup=aiogram.types.ReplyKeyboardRemove(),
     )
+
     keyboard_message_id = data.get("keyboard_message_id")
     await bot.edit_message_reply_markup(chat_id=message.chat.id, message_id=keyboard_message_id, reply_markup=None)
     await bot.send_message(
@@ -467,9 +508,6 @@ async def ticket_answer_message(
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
     await bot.forward_message(admin_id, message.chat.id, message.message_id)
-
-    async with app.database.models.async_session():
-        pass
 
     await state.clear()
 
