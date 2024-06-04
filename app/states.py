@@ -3,6 +3,8 @@ import aiogram.fsm.state
 
 class CreateOrder(aiogram.fsm.state.StatesGroup):
     pcode = aiogram.fsm.state.State()
+    giftcard = aiogram.fsm.state.State()
+    choice = aiogram.fsm.state.State()
 
 
 class CreateTicket(aiogram.fsm.state.StatesGroup):

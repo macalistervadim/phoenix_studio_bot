@@ -93,6 +93,14 @@ async def get_user_for_id(id):
         return result.scalars().first()
 
 
+async def get_pcode_for_id(id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Pcode).filter_by(id=int(id)),
+        )
+        return result.scalars().first()
+
+
 async def get_user_for_blacklist(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(

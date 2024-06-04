@@ -30,10 +30,29 @@ async def update_user(
 
 async def update_pcode(name):
     async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Pcode).where(app.database.models.Pcode.name == name),
+        )
+        pcode = result.scalars().first()
+
+        if pcode.activations <= 0:
+            return False
+
+        # Обновляем количество активаций
         await session.execute(
             sqlalchemy.update(app.database.models.Pcode)
             .where(app.database.models.Pcode.name == name)
-            .values(activations=app.database.models.Pcode.activations - 1),
+            .values(activations=pcode.activations - 1),
+        )
+        await session.commit()
+
+
+async def update_giftcard(name):
+    async with app.database.models.async_session() as session:
+        await session.execute(
+            sqlalchemy.update(app.database.models.GiftCard)
+            .where(app.database.models.GiftCard.name == name)
+            .values(is_active=True),
         )
         await session.commit()
 
@@ -90,6 +109,16 @@ async def get_ticket(user_id):
         return result.scalars().first()
 
 
+async def get_giftcard(user_id):
+    async with app.database.models.async_session() as session:
+        result = await session.execute(
+            sqlalchemy.select(app.database.models.Ticket)
+            .filter_by(user=user_id)
+            .filter(app.database.models.Ticket.status == "CREATED"),
+        )
+        return result.scalars().first()
+
+
 async def get_order(user_id):
     async with app.database.models.async_session() as session:
         result = await session.execute(
@@ -112,6 +141,8 @@ async def add_order(session: sqlalchemy.ext.asyncio.AsyncSession, data):
             item = app.database.models.Order(
                 product=int(data.get("item_id")),
                 user=data.get("user"),
+                pcode=data.get("pcode").id if data.get("pcode") != "0" else None,
+                giftcard=data.get("giftcard").id if data.get("giftcard") is not None else None,
             )
             session.add(item)
             await session.commit()

@@ -99,6 +99,16 @@ class Order(Base):
         sqlalchemy.dialects.postgresql.ENUM(StatusEnum, name="status_enum"),
         default=StatusEnum.CREATED,
     )
+    pcode = sqlalchemy.Column(
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("pcode.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    giftcard = sqlalchemy.Column(
+        sqlalchemy.Integer,
+        sqlalchemy.ForeignKey("giftcard.id", ondelete="CASCADE"),
+        nullable=True,
+    )
 
 
 class GiftCard(Base):

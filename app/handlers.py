@@ -7,6 +7,7 @@ import app.admin.handlers
 import app.admin.keyboards
 import app.database.models
 import app.database.requests
+import app.functions
 import app.keyboards
 import app.messages
 import app.states as st
@@ -172,47 +173,9 @@ async def cmd_create_giftcard_screenshot(
 
 @router.message(aiogram.F.text == "🎀 Мои сертификаты")
 async def cmd_mygiftcards(message: aiogram.types.Message):
-    async with app.database.models.async_session():
-        user = await app.database.requests.get_user(message.from_user.id)
-        active_giftcards_user = await app.database.requests.get_active_giftcards_user(
-            user.id,
-        )
-        inactive_giftcards_user = await app.database.requests.get_inactive_giftcards_user(
-            user.id,
-        )
-
-        if active_giftcards_user or inactive_giftcards_user:
-            await message.answer(
-                app.messages.INFORMATION_MESSAGE + "Вывожу ваши подарочные сертификаты",
-                reply_markup=app.keyboards.MAIN,
-                parse_mode=aiogram.enums.ParseMode.HTML,
-            )
-            for i in active_giftcards_user:
-                is_active = "Да" if i.is_active else "Нет"
-                await message.answer(
-                    f"<code>{i.name}</code>\n"
-                    f"Сумма: {i.amount} руб.\n"
-                    f"Активирован: {is_active}\n\n"
-                    "Скопируйте код, <b>нажав на его название</b> и отправьте другу!"
-                    " При оплате он сможет им воспользоваться",
-                    parse_mode=aiogram.enums.ParseMode.HTML,
-                    reply_markup=app.keyboards.MAIN,
-                )
-            for i in inactive_giftcards_user:
-                is_active = "Да" if i.is_active else "Нет"
-                await message.answer(
-                    f"<b>Ожидает выдачи Агентом Поддержки</b>\n"
-                    f"Сумма: {i.amount} руб.\n"
-                    f"Активирован: {is_active}",
-                    parse_mode=aiogram.enums.ParseMode.HTML,
-                    reply_markup=app.keyboards.MAIN,
-                )
-        else:
-            await message.answer(
-                app.messages.ERORR_MESSAGE + "У вас нет созданных подарочных сертификатов",
-                parse_mode=aiogram.enums.ParseMode.HTML,
-                reply_markup=app.keyboards.MAIN,
-            )
+    messages = await app.functions.get_giftcards_message(message.from_user.id)
+    for text, reply_markup in messages:
+        await message.answer(text, parse_mode=aiogram.enums.ParseMode.HTML, reply_markup=reply_markup)
 
 
 @router.message(st.CreateTicket.question)
@@ -327,17 +290,88 @@ async def product_selected(
     state: aiogram.fsm.context.FSMContext,
 ):
     product = callback.data.replace("product_", "")
-    await state.update_data(item_id=product)
+    user = await app.database.requests.get_user(callback.from_user.id)
+    giftcards = await app.database.requests.get_active_giftcards_user(user.id)
+
+    await state.update_data(item_id=product, giftcards=giftcards)
 
     await callback.message.answer(
         app.messages.INFORMATION_MESSAGE + "Начинаем процесс оформления заказа...\n"
-        f"Ваш выбранный товар - №{product}\n\n"
-        "Пожалуйста, укажите промокод, если он у вас есть: (если нет - напишите 0)",
-        reply_markup=app.keyboards.CANCEL_OR_BACK,
+        f"Ваш <b>выбранный товар - №{product}</b>\n\n",
         parse_mode=aiogram.enums.ParseMode.HTML,
     )
 
-    await state.set_state(st.CreateOrder.pcode)
+    if giftcards:
+        messages = await app.functions.get_giftcards_message(callback.from_user.id)
+        for text, reply_markup in messages:
+            await callback.message.answer(text, parse_mode=aiogram.enums.ParseMode.HTML, reply_markup=reply_markup)
+
+        await callback.message.answer(
+            app.messages.INFORMATION_MESSAGE
+            + "Желаете ли вы использовать один из имеющихся у вас подарочных сертификатов?\n"
+            "Если да - <b>скопируйте название сертификата</b> из сообщения и перешлите мне (если нет - напишите 0)",
+            reply_markup=app.keyboards.GIFT_CARDS,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+
+        await state.set_state(st.CreateOrder.giftcard)
+    else:
+        await callback.message.answer(
+            app.messages.INFORMATION_MESSAGE
+            + "Пожалуйста, укажите промокод, если он у вас есть: (если нет - напишите 0)",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        await state.set_state(st.CreateOrder.pcode)
+
+
+@router.message(st.CreateOrder.giftcard)
+async def order_create_giftcard(
+    message: aiogram.types.Message,
+    state: aiogram.fsm.context.FSMContext,
+    bot: aiogram.Bot,
+):
+    giftcard_name = message.text.lower()
+    giftcard_data = await state.get_data()
+    giftcards = giftcard_data.get("giftcards")
+
+    matching_giftcard = next((gc for gc in giftcards if gc.name == giftcard_name and gc.is_active is not True), None)
+    await state.update_data(giftcard=matching_giftcard)
+
+    if matching_giftcard:
+        await app.database.requests.update_giftcard(matching_giftcard.name)
+
+        await message.answer(
+            app.messages.SUCCESS_MESSAGE
+            + f"Вы успешно использовали подарочный сертификат <code>{matching_giftcard.name}</code> на сумму: "
+            f"{matching_giftcard.amount} руб.\n"
+            "Заранее предупреждаем, что в данный момент сертификат уже является"
+            " <b>использованным</b> и дальнейшее его использование - невозможно (даже если вы отмените заказ)",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE
+            + "Пожалуйста, укажите промокод, если он у вас есть: (если нет - напишите 0)",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+        )
+
+        await state.set_state(st.CreateOrder.pcode)
+    elif message.text.lower() == "0":
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE
+            + "Пожалуйста, укажите промокод, если он у вас есть: (если нет - напишите 0)",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+        )
+
+        await state.set_state(st.CreateOrder.pcode)
+
+    else:
+        await message.answer(
+            app.messages.ERORR_MESSAGE
+            + "Подарочный сертификат не найден или он уже использован, попробуйте еще раз (или введите 0)",
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
 
 
 @router.message(st.CreateOrder.pcode)
@@ -346,8 +380,6 @@ async def order_create_description(
     state: aiogram.fsm.context.FSMContext,
     bot: aiogram.Bot,
 ):
-    await state.update_data(pcode=message.text.lower())
-
     async with app.database.models.async_session() as session:
         user = await app.database.requests.get_user(
             message.from_user.id,
@@ -358,12 +390,22 @@ async def order_create_description(
         if message.text.lower() != "0":
             pcode = await app.database.requests.get_pcode(name=message.text.lower())
             if pcode:
-                await app.database.requests.update_pcode(name=message.text.lower())
-                await message.answer(
-                    app.messages.SUCCESS_MESSAGE
-                    + f"Вы успешно активировали промокод {message.text.lower()} - {pcode.discount}% скидки",
-                    parse_mode=aiogram.enums.ParseMode.HTML,
-                )
+                if await app.database.requests.update_pcode(name=message.text.lower()) is not False:
+                    await state.update_data(pcode=pcode)
+                    await message.answer(
+                        app.messages.SUCCESS_MESSAGE
+                        + f"Вы успешно активировали промокод {message.text.lower()} - {pcode.discount}% скидки",
+                        parse_mode=aiogram.enums.ParseMode.HTML,
+                    )
+                else:
+                    await message.answer(
+                        app.messages.ERORR_MESSAGE
+                        + f"К сожалению, промокод {message.text.lower()} - больше не действителен\n"
+                        "Повторите попытку или введите 0 (если у вас отсутствует промокод)",
+                        parse_mode=aiogram.enums.ParseMode.HTML,
+                    )
+                    await state.set_state(st.CreateOrder.pcode)
+                    return
             else:
                 await message.answer(
                     app.messages.ERORR_MESSAGE + f"К сожалению, промокода {message.text.lower()} - не существует. "
@@ -374,6 +416,7 @@ async def order_create_description(
                 return
 
         data = await state.get_data()
+
         if await app.database.requests.add_order(session, data):
             await app.database.requests.update_user(
                 session,
@@ -386,13 +429,23 @@ async def order_create_description(
             )
 
             user_profile_link = await app.admin.handlers.get_profile_link(message.from_user.id)
-            discount_info = f"ПРОМОКОД: {data.get('pcode')} - {pcode.discount}% скидки" if pcode else ""
+            discount_info = (
+                f"ПРОМОКОД: <code>{data.get('pcode').name}</code> - {pcode.discount}% скидки" if pcode else ""
+            )
+            giftcard_info = (
+                f"ПОДАРОЧНЫЙ СЕРТИФИКАТ: <code>{data.get('giftcard').name}</code> - сумма: "
+                f"{data.get('giftcard').amount} руб."
+                if data.get("giftcard")
+                else ""
+            )
             item = await app.database.requests.get_item(data.get("item_id"))
             await bot.send_message(
                 os.getenv("ADMIN_ID", "admin_id"),
-                app.messages.NOTIFICATION_MESSAGE + f"Пришел новый заказ\n\n{user_profile_link}\n"
-                f"Товар: {item.title.title()}\n"
-                f"{discount_info}",
+                app.messages.NOTIFICATION_MESSAGE
+                + f"Пришел новый заказ\n\n{user_profile_link}\n"
+                + f"Товар: {item.title.title()}\n"
+                + f"{discount_info}\n"
+                + f"{giftcard_info}",
                 parse_mode=aiogram.enums.ParseMode.HTML,
                 reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
             )

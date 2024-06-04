@@ -647,6 +647,8 @@ async def cmd_all_orders(
                 ),
             )
 
+            giftcard_info = await app.database.requests.get_gift(i.giftcard) if i.giftcard is not None else "Нет"
+            pcode_info = await app.database.admin.requests.get_pcode_for_id(i.pcode) if i.pcode != "0" else "Нет"
             item = await app.database.requests.get_item(i.product)
             user = await app.database.admin.requests.get_user_for_id(i.user)
             await state.update_data(user=user)
@@ -657,7 +659,9 @@ async def cmd_all_orders(
                 f"{item.title.title()}\n"
                 f"{user_profile_link}\n"
                 f"Статус: {i.status.name}\n"
-                f"Создан: {i.created_on}\n",
+                f"Создан: {i.created_on.strftime('%H:%M %D')}\n"
+                f"ПРОМОКОД: <code>{pcode_info.name}</code> - {pcode_info.discount}% скидки\n"
+                f"ПОД. СЕРТИФИКАТ: <code>{giftcard_info.name}</code> - сумма: {giftcard_info.amount} руб.\n",
                 parse_mode=aiogram.enums.ParseMode.HTML,
                 reply_markup=keyboard.as_markup(),
             )
@@ -794,8 +798,6 @@ async def cmd_all_pcodes(
                     parse_mode=aiogram.enums.ParseMode.HTML,
                     reply_markup=app.admin.keyboards.ADMIN_COMMANDS,
                 )
-
-            await state.set_state(app.admin.states.DeletePocde.name)
         else:
             await message.answer(
                 app.messages.ERORR_MESSAGE + "К сожалению, промокодов нет",

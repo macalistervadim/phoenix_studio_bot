@@ -32,7 +32,6 @@ SUBSCRIPTION = aiogram.types.ReplyKeyboardMarkup(
 CANCEL_OR_BACK = aiogram.types.ReplyKeyboardMarkup(
     keyboard=[
         [aiogram.types.KeyboardButton(text="Отменить")],
-        [aiogram.types.KeyboardButton(text="Назад")],
     ],
     resize_keyboard=True,
     input_field_placeholder="Выберите пункт меню",
@@ -74,4 +73,13 @@ SCORE_SUPPORT.add(
         text="😀",
         callback_data="score_4",
     ),
+)
+
+CHOICE = aiogram.types.ReplyKeyboardMarkup(
+    keyboard=[
+        [aiogram.types.KeyboardButton(text="Да")],
+        [aiogram.types.KeyboardButton(text="Нет")],
+    ],
+    resize_keyboard=True,
+    input_field_placeholder="Выберите пункт меню",
 )
