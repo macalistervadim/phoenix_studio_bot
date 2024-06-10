@@ -268,7 +268,7 @@ async def cmd_catalog(message: aiogram.types.Message):
 
             await message.answer_photo(
                 i.image,
-                caption=f"<b>{i.title.title()}</b>\n\n"
+                caption=f"<b>{i.title.capitalize()}</b>\n\n"
                 f"{i.description}\n\n"
                 f"Цена за услугу: {i.price} руб.\n"
                 f"Срок выполнения: {i.deadline} дней",

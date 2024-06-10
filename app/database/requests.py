@@ -141,7 +141,7 @@ async def add_order(session: sqlalchemy.ext.asyncio.AsyncSession, data):
             item = app.database.models.Order(
                 product=int(data.get("item_id")),
                 user=data.get("user"),
-                pcode=data.get("pcode").id if data.get("pcode") != "0" else None,
+                pcode=data.get("pcode").id if data.get("pcode") and data.get("pcode") != "0" else None,
                 giftcard=data.get("giftcard").id if data.get("giftcard") is not None else None,
             )
             session.add(item)

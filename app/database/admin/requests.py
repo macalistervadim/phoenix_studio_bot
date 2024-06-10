@@ -64,7 +64,7 @@ async def get_ratings_statistics():
 async def get_all_pcodes():
     async with app.database.models.async_session() as session:
         result = await session.execute(
-            sqlalchemy.select(app.database.models.Pcode),
+            sqlalchemy.select(app.database.models.Pcode).where(app.database.models.Pcode.activations > 0),
         )
         return result.scalars().all()
 

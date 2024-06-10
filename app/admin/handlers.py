@@ -1270,7 +1270,7 @@ async def create_item_title(
     await state.update_data(title=message.text.lower())
 
     await message.answer(
-        app.messages.INFORMATION_MESSAGE + "Теперь необходимо ввести описание товара/услуги (макс. 250 символов)",
+        app.messages.INFORMATION_MESSAGE + "Теперь необходимо ввести описание товара/услуги",
         parse_mode=aiogram.enums.ParseMode.HTML,
         reply_markup=app.keyboards.CANCEL_OR_BACK,
     )
@@ -1283,15 +1283,22 @@ async def create_item_description(
     message: aiogram.types.Message,
     state: aiogram.fsm.context.FSMContext,
 ):
-    await state.update_data(description=message.text.lower())
+    if len(message.text) >= 900:
+        await message.answer(
+            app.messages.ERORR_MESSAGE + "Слишком длинное описание",
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
+    else:
+        await state.update_data(description=message.text)
 
-    await message.answer(
-        app.messages.INFORMATION_MESSAGE + "Прикрепите одно изображение к товару/услуге",
-        reply_markup=app.keyboards.CANCEL_OR_BACK,
-        parse_mode=aiogram.enums.ParseMode.HTML,
-    )
+        await message.answer(
+            app.messages.INFORMATION_MESSAGE + "Прикрепите одно изображение к товару/услуге",
+            reply_markup=app.keyboards.CANCEL_OR_BACK,
+            parse_mode=aiogram.enums.ParseMode.HTML,
+        )
 
-    await state.set_state(app.admin.states.CreateItem.image)
+        await state.set_state(app.admin.states.CreateItem.image)
 
 
 @router.message(aiogram.F.photo, app.admin.states.CreateItem.image)
